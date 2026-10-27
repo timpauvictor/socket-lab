@@ -26,6 +26,7 @@ JOBS = [
     "reporting/build_board.py", "reporting/plot_board.py",
     "run_eval.py", "run_train.py", "serve.py", "cloud/vast/run.py",
     "cloud/vast/lifecycle.py", "cloud/vast/upload.py", "cloud/vast/provision.py",
+    "evaluation/eval_task_eos.py", "cloud/vast/task_eos_experiment.py", "cloud/vast/task_eos_artifacts.py",
 ])
 def test_script_help_from_another_directory(script, tmp_path):
     result = subprocess.run([sys.executable, str(ROOT / script), "--help"],

@@ -48,14 +48,15 @@ def translation_examples(src: str, tgt: str, rows: Iterable[tuple[str, str]]) ->
 
 
 def tokenize_completion(example: Mapping[str, str], *, tokenizer: Any,
-                        eos_stop: bool = False) -> dict[str, list[int]]:
+                        eos_stop: bool = False,
+                        paired_control: bool = False) -> dict[str, list[int]]:
     max_len = 256
     # EOS is an explicit supervised target only for the opt-in tune-up.
     eos = [tokenizer.eos_token_id] if eos_stop else []
     if eos_stop and tokenizer.eos_token_id is None:
         raise SystemExit("tokenizer has no EOS token; --eos_stop needs one")
     full_ids = tokenizer(example["prompt"] + example["completion"],
-                         truncation=True, max_length=max_len - len(eos))["input_ids"]
+                         truncation=True, max_length=max_len - int(eos_stop or paired_control))["input_ids"]
     full_ids = full_ids + eos
     plen = len(tokenizer(example["prompt"], truncation=True, max_length=max_len)["input_ids"])
     plen = min(plen, len(full_ids))

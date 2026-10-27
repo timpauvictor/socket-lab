@@ -28,7 +28,10 @@ import urllib.request
 from collections.abc import Iterator
 from pathlib import Path
 
-from prompts import translation_prompt
+if __package__:
+    from .prompts import translation_prompt
+else:
+    from prompts import translation_prompt
 
 LANG_NAMES = {"ro": "Romanian", "en": "English", "fr": "French", "de": "German", "fi": "Finnish"}
 # FLORES+ uses ISO 639-3 codes on the Hub

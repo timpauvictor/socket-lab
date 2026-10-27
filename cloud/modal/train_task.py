@@ -57,6 +57,7 @@ train_image = (
     .add_local_file(str(Path(__file__).resolve()), "/root/job_definition.py")
     .add_local_file(str(TRAIN_SCRIPT), "/root/job_train_task.py")
     .add_local_file(str(REPO_ROOT / "training/translation_data.py"), "/root/translation_data.py")
+    .add_local_file(str(REPO_ROOT / "training/task_model.py"), "/root/task_model.py")
     .add_local_file(str(REPO_ROOT / "cloud/modal/artifacts.py"), "/root/cloud/modal/artifacts.py")
     .add_local_file(str(REPO_ROOT / "cloud/modal/processes.py"), "/root/cloud/modal/processes.py")
 )
@@ -112,7 +113,7 @@ def train_run(run_id: str, phase: str, max_pairs: int, max_steps: int,
     ]
     inputs = [f"/vault{_box_dir(lang, phase)}/{name}" for lang in LANGS
               for name in ("adapter_config.json", "adapter_model.safetensors")]
-    request = request_identity(command, sources=["/root/translation_data.py", "/root/job_definition.py"], inputs=inputs)
+    request = request_identity(command, sources=["/root/translation_data.py", "/root/task_model.py", "/root/job_definition.py"], inputs=inputs)
     existing = check_run_request(out_dir, run_id, request)
     if existing is not None:
         return existing

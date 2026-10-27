@@ -32,7 +32,7 @@ Historical journals and review notes retain the paths used at the time: `initial
 - `evaluation/prompts.py` owns evaluation/probe prompt formatting and the six diagnostic inputs; `evaluation/repetition.py` owns their repeated-word check. Record validation and chrF scoring remain shared through `eval_llama.py`.
 - `cloud/modal/artifacts.py` owns file hashes, manifest serialization, and verified retrieval. `cloud/modal/processes.py` owns environment capture and live subprocess logging; the original smoke job still uses buffered logging.
 
-When copying a trainer manually, copy `translation_data.py` beside it. The termination probe needs `prompts.py` and `repetition.py` beside it. Modal images and the Vast training uploader include the dependencies they use; the training script names and remote training paths have not changed. Python launchers replace the old PowerShell/Bash entry points; historical journals retain their original commands.
+When copying a trainer manually, copy `translation_data.py` beside it. Task training also needs `task_model.py`. The termination probe needs `prompts.py` and `repetition.py` beside it. Modal images and the Vast training uploader include the dependencies they use; the training script names and remote training paths have not changed. Python launchers replace the old PowerShell/Bash entry points; historical journals retain their original commands.
 
 ## New inference runs
 
@@ -105,4 +105,41 @@ python run_train.py --job smoke --phase smoke
 
 Only the first example is a preview; the others launch paid jobs. `--job smoke --phase smoke` replaces the standalone smoke launcher. Other job choices are `task` and `eos-tune`. Training logs remain under `logs/`, and child exit codes are preserved. All three root launchers support `--dry-run` without starting processes or creating logs. The server stays foreground-only; Ctrl+C cancels its owned child. No installed project CLI is required. Interrupting the training launcher cancels its local Modal client; confirm the remote job state in Modal before assuming billing has stopped.
 
-The current scripts retain historical experimental settings. In particular, `train_task.py` has no EOS target option and uses the original PEFT linear factor merge. Manual monolithic resume restores adapter weights and step accounting, not optimizer state or data position. These paths must not be described as an exact continuation or a validated composition recipe.
+The current scripts retain historical training defaults. `train_task.py` uses the original PEFT linear factor merge; its opt-in `--tune_from`, `--total_steps`, `--paired_control` and `--eos_stop` options support the separate controlled experiment described below. Manual monolithic resume restores adapter weights and step accounting, not optimizer state or data position. These paths must not be described as an exact continuation or a validated composition recipe.
+
+## Controlled task-adapter EOS experiment: preparation only
+
+The new path does not change historical recipes, banked logs or the evaluation
+board. The [experiment report](controlled-task-eos-experiment.md) records the
+first live preflight failure and the remaining checks; it contains no new scores. See [the complete Vast procedure](../cloud/vast/README.md#controlled-combined-adapter-eos-experiment-separate-workflow)
+for staging, provenance format, approvals, budgets, execution and bundle retrieval.
+The current packet authorizes local preparation ONLY, not uploads or instance use.
+
+Read-only preview from the repository root (no dependency installation):
+
+```text
+python -B cloud/vast/task_eos_experiment.py run --repo . --output _tools/eos-preview --run-id eos-preview --destination OWNER/eos-preview --full --dry-run
+python -B cloud/vast/task_eos_experiment.py stage-list --repo .
+```
+
+`training/task_model.py` is the shared train/eval box-composition owner.
+`evaluation/eval_task_eos.py` uses the saved FLORES source/reference pairs only,
+not their saved hypotheses; all four arms use one BF16 Transformers path.
+`cloud/vast/task_eos_experiment.py` supervises freeze, disposable smoke, serial
+B/C training and evaluation, complete-bundle finalization and stop. It never
+uses smoke outputs to initialize full arms. Both full arms load the original
+rank-32 task adapter, use 333/333/334 optimizer steps and identical 255-token
+non-EOS content. Only C supervises the appended EOS. A remains untouched; D
+loads the existing EOS-tuned monolith without boxes.
+
+Focused local checks using the already available review environment:
+
+```text
+_tools/review-env/Scripts/python.exe -m pytest tests/test_training_tokens.py tests/test_task_eos.py tests/test_evaluation.py tests/test_vast.py tests/test_layout.py -q --basetemp=_tools/pytest-task-eos
+```
+
+Mocks verify local orchestration/contracts, not real GPU/PEFT correctness. Before
+live execution, supply explicit authority, instance details, a new private artifact
+destination, resolved model/data commits, inspected adapter provenance and a
+cost/time ceiling. Real smoke updates/frozen weights, memory/time, provider stop,
+all full comparisons and retrieved bundle hashes remain live checks.

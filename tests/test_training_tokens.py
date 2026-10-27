@@ -40,6 +40,22 @@ def test_eos_reserves_one_position_and_requires_a_token():
         tokenize_completion({"prompt": "P", "completion": "a"}, tokenizer=tokenizer, eos_stop=True)
 
 
+@pytest.mark.parametrize("completion", ["yes", "a" * 300])
+def test_paired_controls_match_content_labels_and_truncation(completion):
+    example = {"prompt": "P:", "completion": completion}
+    off = tokenize_completion(example, tokenizer=CharacterTokenizer(), paired_control=True)
+    on = tokenize_completion(example, tokenizer=CharacterTokenizer(), paired_control=True, eos_stop=True)
+    length = sum(off["attention_mask"])
+    assert off["input_ids"][:length] == on["input_ids"][:length]
+    assert off["labels"][:length] == on["labels"][:length]
+    assert on["input_ids"][length] == on["labels"][length] == 999
+    assert off["attention_mask"][length] == 0 and off["labels"][length] == -100
+    assert on["attention_mask"][length] == 1
+    assert length <= 255
+    if len(completion) > 255:
+        assert length == 255
+
+
 def test_pair_preparation_filters_deduplicates_then_shuffles_and_caps():
     class ReverseOrder:
         def shuffle(self, rows):

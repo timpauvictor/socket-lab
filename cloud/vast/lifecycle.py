@@ -172,17 +172,20 @@ def stop_reason(log: Path, pattern: str, tag: str, now: float, started_at: float
     return "training log is inactive" if age > STALE_SECONDS else None
 
 
-def watchdog(log: Path, pattern: str, tag: str) -> int:
+def watchdog(log: Path, pattern: str, tag: str, *, deadline: float | None = None,
+             interval: float = CHECK_INTERVAL) -> int:
     container_credentials()
     if not pattern:
         raise ValueError("completion pattern cannot be empty")
     started_at = time.time()
     while True:
-        time.sleep(CHECK_INTERVAL)
+        time.sleep(interval)
+        now = time.time()
         _, done = markers(log, tag)
-        if done.exists():
+        if done.exists() and deadline is None:
             return 0
-        reason = stop_reason(log, pattern, tag, time.time(), started_at)
+        reason = "approved deadline exhausted" if deadline is not None and now >= deadline else stop_reason(
+            log, pattern, tag, now, started_at)
         if reason:
             print(f"WATCHDOG: {reason}; requesting stop, never destruction.", flush=True)
             if stop_self():
