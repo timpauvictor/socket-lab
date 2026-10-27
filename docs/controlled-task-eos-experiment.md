@@ -2,9 +2,10 @@
 
 ## Status: incomplete before training
 
-Local preparation is implemented. The first approved Vast attempt on 2026-10-27
-failed during input preparation, before any smoke or full optimizer step and
-before any new evaluation. There are **no new experiment scores** to report.
+Local preparation is implemented. Two approved Vast attempts on 2026-10-27
+failed before any smoke or full optimizer step and before any new evaluation.
+The first failed on dependency imports; the second exposed a token-boundary bug.
+There are **no new experiment scores** to report.
 Historical results and adapters remain unchanged.
 
 The experiment compares:
@@ -65,26 +66,58 @@ passed SHA-256/size verification. It includes original input copies, preflight
 records, stdout/stderr and an honest incomplete completion record. Private
 credentials were not included.
 
-SSH subsequently refused connections. The final instance stop acknowledgment
-was not retrieved, so provider state and cessation of GPU billing still require
-confirmation. The instance was not destroyed or automatically restarted.
+SSH subsequently refused connections. After an explicitly approved user restart,
+the first attempt's closeout receipt was recovered: upload and instance stop were
+both acknowledged. Dashboard billing confirmation remains user-owned. The
+instance was not destroyed or automatically restarted.
 
 The scoped repair adds `cloud/vast/task-eos-requirements.txt`, pinning Datasets
 5.0.1 with the historical Transformers/PEFT stack and Hub 0.36.2. Installation
 must be followed by `uv pip check` and actual imports of the whole training/eval
-stack before launch. This repair has local checks; a renewed live dependency
-check and all smoke/training/evaluation acceptance remain pending.
+stack before launch. On the approved retry, `uv pip check` passed for all 108 installed packages and
+actual imports of the full training/evaluation stack passed. No Torch replacement
+was needed. This resolved the dependency failure, but did not prove training.
+
+## Second attempt: completion-boundary masking
+
+The retry froze all three raw selections of 150,000 pairs, then failed while
+tokenizing smoke B, before model loading or an optimizer step. Its complete
+43-file recovery bundle was retrieved at an immutable revision and hash-verified.
+The failure-stop path ran again; that retry's post-finalization stop receipt
+remains pending retrieval.
+
+The first offending row was short, not over budget. Its standalone prompt ended
+with a space token; joint prompt/completion tokenization merged that space with
+the first completion word. Counting standalone prompt tokens masked the whole
+completion. Paired controls now use joint-token character offsets to find the
+supervised boundary. Historical non-paired masking remains unchanged.
+
+A local real-tokenizer scan inspected all 900,000 frozen translation directions.
+After the boundary fix, eight entire pairs still genuinely could not provide a
+completion token in one or both directions: six fr-en and two de-en. The user
+approved excluding such an entire pair from BOTH controls during once-only frozen
+preparation, without rewriting text or backfilling replacements. The raw selection,
+excluded original indices/directions/reasons, usable order, counts and hashes are
+preserved. Both translation directions remain for each retained pair.
+
+The local scan used the exact tokenizer source revision but newer local library
+versions; the pinned remote stack must verify its own counts. Local predictions
+are 150,000 ro-en, 149,994 fr-en and 149,998 de-en usable pairs. No training used
+these corrected inputs yet. The original budget/deadline remains in effect.
 
 ## Checks and next execution
 
-The affected focused suite passed **100 tests** after the preparation and
-provenance/dependency changes. Backend stand-ins test ownership, token matching,
+The affected focused suite passed **102 tests** after the boundary and whole-pair
+filtering fixes. The actual shared filtering owner also processed the complete
+local frozen corpus and confirmed 150,000 / 149,994 / 149,998 usable pairs while
+preserving the raw selections. Exact remote-library acceptance remains pending. Backend stand-ins test ownership, token matching,
 resume/error handling, allocation and lifecycle failures; they do not prove real
 GPU training. See [running instructions](running.md#controlled-task-adapter-eos-experiment-preparation-only)
 and the [Vast procedure](../cloud/vast/README.md#controlled-combined-adapter-eos-experiment-separate-workflow).
 
-A retry requires explicit authorization to restart the existing instance, current
-SSH details, fresh run/output/artifact identities and a remaining-budget check.
+The user approved the matched exclusion rule and another retry on the existing
+instance. Before launch, confirm access, fresh run/output/artifact identities and
+the remaining original budget/deadline.
 The original approved deadline/spend ceiling must not reset automatically. No
 training checkpoint exists to resume. Real smokes must verify finite gradients,
 task updates, frozen weights and memory/time before full execution proceeds.

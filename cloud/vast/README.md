@@ -184,6 +184,17 @@ boxes. Decoding is BF16 Transformers/PEFT, greedy, EOS-or-128-token-cap, with no
 newline stop. Reports score first-line chrF but repetition uses full continuations.
 Errors/missing rows make final scores/rates incomplete, not successful empty outputs.
 
+Paired-control labels use the fast tokenizer's character offsets on the JOINT
+prompt/completion text. A token containing the prompt's trailing space and the
+first completion word is supervised, not mistaken for prompt-only content.
+This preserves all shared non-EOS IDs/labels across B/C and does not rewrite
+source text. Historical non-paired masking is unchanged. Frozen preparation
+preserves each raw selection as `PAIR.selected.json`, then excludes an ENTIRE
+pair from both controls if either direction has no completion token within the
+unchanged 255-token content budget. `PAIR.excluded.json` records original indices,
+directions and reasons; `PAIR.json` keeps the remaining order without backfill.
+Raw/usable/excluded counts and all file hashes remain in the bundle.
+
 ### Required before any live operation
 
 Obtain explicit upload/install/run/stop approval, SSH host/port/user and instance

@@ -314,10 +314,21 @@ def test_freeze_selects_data_once_copies_originals_and_binds_sources(tmp_path, m
     monkeypatch.setitem(sys.modules, "datasets", SimpleNamespace(
         get_dataset_config_names=lambda *a, **k: ["ro-en", "fr-en", "de-en"], load_dataset=load))
     monkeypatch.setattr(artifacts, "runtime_metadata", lambda: {"packages": "test"})
+    class Tokenizer:
+        def __call__(self, texts, **kwargs):
+            return {"input_ids": [list(range(min(len(t), kwargs["max_length"]))) for t in texts],
+                    "offset_mapping": [[(i, i + 1) for i in range(min(len(t), kwargs["max_length"]))] for t in texts]}
+    monkeypatch.setitem(sys.modules, "transformers", SimpleNamespace(AutoTokenizer=SimpleNamespace(
+        from_pretrained=lambda name, revision: Tokenizer())))
     output = tmp_path / "frozen"
     artifacts.freeze_inputs(repo, output, "a" * 40, "b" * 40, provenance_path)
     assert len(loaded) == 3 and all(k["revision"] == "b" * 40 for _, k in loaded)
     assert json.loads((output / "data/ro-en.json").read_text()) == [["hello", "hello"]]
+    assert json.loads((output / "data/ro-en.selected.json").read_text()) == [["hello", "hello"]]
+    assert json.loads((output / "data/ro-en.excluded.json").read_text()) == []
+    selections = json.loads((output / "identity.json").read_text())["selections"]
+    assert selections["ro-en"]["raw_selected_pairs"] == selections["ro-en"]["selected_pairs"] == 1
+    assert selections["ro-en"]["excluded_pairs"] == 0
     artifacts.check_frozen(output, repo)
     (repo / "adapters/task-full/adapter_model.safetensors").write_bytes(b"changed original")
     assert (output / "adapters/task-full/adapter_model.safetensors").read_bytes() == b"original task weights"

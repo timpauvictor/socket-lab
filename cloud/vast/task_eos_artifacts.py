@@ -16,7 +16,7 @@ if not __package__:
 from cloud.modal.artifacts import file_manifest, hash_file, write_manifest
 from evaluation.eval_llama import load_pairs
 from training.task_model import validate_adapter
-from training.translation_data import find_config, prepare_pairs
+from training.translation_data import find_config, prepare_control_pairs, prepare_pairs
 
 MODEL = "Qwen/Qwen3-0.6B-Base"
 PAIRS = ("ro-en", "fr-en", "de-en")
@@ -31,7 +31,9 @@ SETTINGS = {"model": MODEL, "pairs": PAIRS, "steps": [333, 333, 334], "seed": 42
             "learning_rate": 5e-5, "microbatch": 8, "accumulation": 4, "rank": 32,
             "bf16": True, "max_length": 256, "content_budget": 255, "warmup_ratio": 0.05,
             "scheduler": "cosine_per_pair_restart", "compile": False,
-            "max_pairs": 150000, "composition": "peft-linear-1+1", "max_new_tokens": 128}
+            "max_pairs": 150000, "composition": "peft-linear-1+1", "max_new_tokens": 128,
+            "paired_label_boundary": "joint_token_character_offsets",
+            "unusable_pair_policy": "exclude_whole_pair_if_either_direction_has_no_completion; no_backfill"}
 
 
 def input_names() -> list[str]:
@@ -137,6 +139,8 @@ def freeze_inputs(repo: Path, output: Path, model_revision: str, dataset_revisio
                         raise RuntimeError(f"Completion provenance changed while freezing: {adapter}")
     (output / "data").mkdir()
     from datasets import get_dataset_config_names, load_dataset
+    from transformers import AutoTokenizer
+    tokenizer = AutoTokenizer.from_pretrained(MODEL, revision=model_revision)
     rng = random.Random(42)
     configs = get_dataset_config_names("Helsinki-NLP/opus-100", revision=dataset_revision)
     selections = {}
@@ -145,10 +149,14 @@ def freeze_inputs(repo: Path, output: Path, model_revision: str, dataset_revisio
         config = find_config(src, tgt, configs)
         dataset = load_dataset("Helsinki-NLP/opus-100", config, split="train", revision=dataset_revision)
         rows = prepare_pairs(dataset, src, tgt, 150000, rng, progress_every=100000)
-        if not rows:
+        write_manifest(output / "data" / f"{pair}.selected.json", rows)
+        usable, excluded = prepare_control_pairs(src, tgt, rows, tokenizer)
+        write_manifest(output / "data" / f"{pair}.excluded.json", excluded)
+        if not usable:
             raise ValueError(f"No usable training data: {pair}")
-        write_manifest(output / "data" / f"{pair}.json", rows)
-        selections[pair] = {"config": config, "selected_pairs": len(rows),
+        write_manifest(output / "data" / f"{pair}.json", usable)
+        selections[pair] = {"config": config, "raw_selected_pairs": len(rows),
+                            "selected_pairs": len(usable), "excluded_pairs": len(excluded),
                             "dataset_fingerprint": getattr(dataset, "_fingerprint", None)}
     write_manifest(output / "identity.json", {"settings": SETTINGS, "model_revision": model_revision,
         "tokenizer_revision": model_revision, "dataset_revision": dataset_revision,
