@@ -1,0 +1,20 @@
+figure,pair,series,value
+g1,en-ro,base,38.98
+g1,en-ro,eos-tune,44.36
+g1,en-ro,delta,+5.38
+g1,ro-en,base,57.16
+g1,ro-en,eos-tune,59.34
+g1,ro-en,delta,+2.18
+g1,de-en,base,60.43
+g1,de-en,eos-tune,59.90
+g1,de-en,delta,-0.53
+g2,de-fr,base direct,47.57
+g2,de-fr,tuned direct,39.55
+g2,de-fr,base pivot,47.70
+g2,de-fr,tuned pivot,49.11
+g3,en-ro,worst untuned loop %,74.3
+g3,en-ro,tuned loop %,0.8
+g3,ro-en,worst untuned loop %,91.9
+g3,ro-en,tuned loop %,0.0
+g3,de-en,worst untuned loop %,95.0
+g3,de-en,tuned loop %,0.0

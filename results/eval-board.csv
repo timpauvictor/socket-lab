@@ -1,0 +1,19 @@
+pair,setup,n,chrf,eval_file,adapters,notes
+ro-en,base,1012,57.16,logs/eval-ro-en-devtest.jsonl,none,floor; plain Qwen3-0.6B-Base Q8_0
+en-ro,base,1012,38.98,logs/eval-en-ro-devtest.jsonl,none,floor; plain Qwen3-0.6B-Base Q8_0
+ro-en,task-only,10,39.99,logs/eval-task-ro-en-devtest.jsonl,task-full-lora.gguf,smoke only; n=10 too noisy to compare
+en-ro,task-only,1012,29.36,logs/eval-task-en-ro-devtest.jsonl,task-full-lora.gguf,full run; skill alone no boxes; 74.3% looped
+en-ro,task+box-ro+box-en,1012,33.11,logs/eval-taskbox-en-ro-devtest.jsonl,task-full-lora.gguf+box-ro-lora.gguf+box-en-lora.gguf,full run; ears stacked via single comma-joined --lora; 58.3% looped
+de-en,task+box-ro+box-en,1012,37.88,logs/eval-taskbox-de-en-devtest.jsonl,task-full-lora.gguf+box-ro-lora.gguf+box-en-lora.gguf,full run; last-trained pair; 95.0% looped
+de-en,base,1012,60.43,logs/eval-de-en-devtest.jsonl,none,floor; plain Qwen3-0.6B-Base Q8_0
+en-ro,monolith,1012,38.94,logs/eval-monolith-en-ro-devtest.jsonl,monolith-lora.gguf,full run; interleaved control; numerically equals floor but 59.0% looped vs base 6.5% — retracted as preservation evidence
+ro-en,monolith,1012,38.60,logs/eval-monolith-ro-en-devtest.jsonl,monolith-lora.gguf,full run; 91.9% looped; do not read as preserved skill
+de-en,monolith,1012,38.62,logs/eval-monolith-de-en-devtest.jsonl,monolith-lora.gguf,full run; 94.1% looped; do not read as preserved skill
+en-ro,eos-tune,1012,44.36,logs/eval-eostune-en-ro-devtest.jsonl,eos-tune-lora.gguf,full run; +5.38 vs floor; 0.8% looped
+ro-en,eos-tune,1012,59.34,logs/eval-eostune-ro-en-devtest.jsonl,eos-tune-lora.gguf,full run; +2.18 vs floor; 0.0% looped
+de-en,eos-tune,1012,59.90,logs/eval-eostune-de-en-devtest.jsonl,eos-tune-lora.gguf,full run; -0.53 vs floor (tie); 0.0% looped
+de-fr,base,1012,47.57,logs/eval-base-de-fr-devtest.jsonl,none,floor; zero-shot unseen pairing; plain Qwen3-0.6B-Base Q8_0
+de-fr,eos-tune,1012,39.55,logs/eval-eostune-de-fr-devtest.jsonl,eos-tune-lora.gguf,full run; -8.02 vs floor; 0.8% looped; English-anchored direct mapping fails
+de-fr,base-pivot-via-en,1012,47.70,logs/eval-pivot-base-de-fr-devtest.jsonl,none,pivot de-en-fr on plain base; matches direct floor; 0.1% English
+de-fr,eos-tune-pivot-via-en,1012,49.11,logs/eval-pivot-tuned-de-fr-devtest.jsonl,eos-tune-lora.gguf,pivot de-en-fr on tuned adapter; +1.54 vs floor; 0.2% English; explicit intermediate composes
+de-fr,base-scratchpad,1012,45.90,logs/eval-scratch-base-de-fr-devtest.jsonl,none,think-in-English single generation on base; 94.6% format-follow; below direct floor

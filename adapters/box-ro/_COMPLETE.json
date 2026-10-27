@@ -1,0 +1,44 @@
+{
+  "base_model": "Qwen/Qwen3-0.6B-Base",
+  "completed_at_utc": "2026-10-19T00:08:00.710145+00:00",
+  "epochs": 2.0,
+  "files": [
+    {
+      "bytes": 1127,
+      "name": "adapter_config.json",
+      "sha256": "59acb430032d71b0a389b4d12d5e0ce7c29b784c0bfbbc4e1201b54d42c623ca"
+    },
+    {
+      "bytes": 18380008,
+      "name": "adapter_model.safetensors",
+      "sha256": "99c47820b236c92e4f0fb9f4f074300817c07e7fb7c130697b9d95c869dad988"
+    },
+    {
+      "bytes": 447626,
+      "name": "train.log",
+      "sha256": "a650b4d796d78fa59a2689b0663a130e3091dcbbceb4446a3c97275641e41a39"
+    },
+    {
+      "bytes": 160,
+      "name": "probe.json",
+      "sha256": "bcaa9694d4c9df3167c3748427247a0e14b85289e9e31afc2c3b32cc3caef0a6"
+    }
+  ],
+  "final_loss": 2.395249417114258,
+  "lang": "ro",
+  "max_chunks": 100000,
+  "max_steps": 0,
+  "rank": 16,
+  "run_id": "qwen06b-box-ro-full-001",
+  "sample": "reservoir",
+  "status": "complete",
+  "versions": {
+    "accelerate": "1.15.0",
+    "datasets": "5.0.1",
+    "peft": "0.21.2",
+    "torch": "2.14.1",
+    "transformers": "4.57.6"
+  },
+  "volume": "bespoke-hypernetworks-vault",
+  "volume_path": "/adapters/qwen06b/box-ro/qwen06b-box-ro-full-001"
+}

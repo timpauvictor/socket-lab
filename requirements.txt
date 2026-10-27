@@ -1,0 +1,11 @@
+# Training and evaluation dependencies (not a complete reproducibility lock).
+# Install: python -m pip install -r requirements.txt
+# New streamed evaluation needs access to openlanguagedata/flores_plus.
+# Saved-record scoring needs only sacrebleu; chart tools use openpyxl/matplotlib.
+torch
+transformers>=4.57
+peft
+datasets
+sacrebleu==2.6.0
+accelerate
+huggingface_hub
