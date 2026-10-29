@@ -1,0 +1,25 @@
+# Secrets never enter git. vast/.env holds local-only tokens (HF_TOKEN).
+# Fill values in an editor; never paste them in chat.
+*.env
+.env
+
+# Local-only large artifacts: link these from HF instead of committing them.
+models/
+*_tools/
+**/*.safetensors
+**/*.gguf
+**/*.bin
+**/*.pt
+**/*.pth
+vast/staging/
+
+# Python caches.
+__pycache__/
+*.pyc
+
+# Curated out: smoke-run adapter markers and operational noise.
+adapters/*-smoke/
+adapters/smoke/
+logs/full-pids.txt
+logs/ps1-single-out.txt
+logs/smoke-exits.txt

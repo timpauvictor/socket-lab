@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Notes on the PyTorch parts of socket-lab, with small examples of tensors, training, LoRA, inference and debugging.">
+<title>PyTorch through socket-lab — study notes</title>
+<style>
+:root{color-scheme:light;--ink:#182c3a;--muted:#465b68;--paper:#fff;--bg:#f2f5f5;--line:#cedbdf;--accent:#006657;--soft:#e8f5f0;--warn:#fff4db;--code:#142a36}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:1rem}body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.7 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}a{color:var(--accent);text-underline-offset:.2em}a:hover{text-decoration-thickness:2px}a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:3px solid #a34500;outline-offset:5px}.skip{position:absolute;top:-6rem;left:1rem;z-index:9;background:white;padding:.5rem 1rem}.skip:focus{top:1rem}.layout{display:grid;grid-template-columns:245px minmax(0,1fr);max-width:1440px;margin:auto}nav{position:sticky;top:0;align-self:start;max-height:100vh;overflow:auto;padding:2rem 1.3rem}nav strong{display:block;margin-bottom:.8rem;color:var(--accent);letter-spacing:.08em;font-size:.8rem;text-transform:uppercase}nav a{display:block;padding:.3rem 0;color:var(--ink);font-size:.88rem;text-decoration:none}nav a:hover{text-decoration:underline}main{min-width:0;background:var(--paper);padding:3.5rem clamp(1.2rem,4vw,4.5rem);border-inline:1px solid var(--line)}header{padding-bottom:2rem;border-bottom:2px solid var(--accent)}.eyebrow{font-size:.8rem;letter-spacing:.12em;text-transform:uppercase;font-weight:750;color:var(--accent)}h1{font-size:clamp(2.1rem,5vw,3.7rem);line-height:1.12;letter-spacing:-.04em;margin:.6rem 0 1.2rem;max-width:18ch}h2{font-size:1.75rem;line-height:1.25;letter-spacing:-.02em;margin:0 0 1.2rem}h3{font-size:1.15rem;line-height:1.4;margin:1.6rem 0 .6rem}p{margin:.7rem 0 1rem}section{padding:2.8rem 0;border-bottom:1px solid var(--line)}.lead{font-size:1.16rem;max-width:65ch}.muted,.source{color:var(--muted);font-size:.9rem}.source{margin-top:1rem}.callout{padding:1.1rem 1.4rem;margin:1.3rem 0;border-left:4px solid var(--accent);background:var(--soft);border-radius:0 8px 8px 0}.callout p:last-child{margin-bottom:0}.warning{background:var(--warn);border-color:#99600b}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:1rem}.card{border:1px solid var(--line);border-radius:10px;padding:1.2rem}.card h3{margin-top:0}.tag{display:inline-block;border:1px solid currentColor;border-radius:20px;padding:.05rem .6rem;font-size:.75rem;font-weight:700;color:var(--accent);margin-bottom:.5rem}.table-wrap{overflow-x:auto;margin:1.3rem 0}table{border-collapse:collapse;width:100%;font-size:.9rem}caption{text-align:left;font-weight:700;margin-bottom:.65rem}th,td{padding:.75rem .8rem;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}th{background:#edf3f4}td code{overflow-wrap:anywhere}pre{overflow-x:auto;background:var(--code);color:#eef7f9;padding:1.25rem;border-radius:9px;line-height:1.6;font-size:.84rem;tab-size:4}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9em}p code,li code,td code{background:#edf2f4;padding:.1em .25em;border-radius:3px}pre code{font-size:inherit}details{border:1px solid var(--line);border-radius:8px;margin:.8rem 0;padding:.85rem 1rem}summary{cursor:pointer;font-weight:650}details[open] summary{margin-bottom:.8rem}details p:last-child{margin-bottom:.25rem}li{margin:.35rem 0}blockquote{margin:1rem 0;padding:1rem 1.4rem;border-left:4px solid var(--accent);background:var(--soft)}.flow{padding-left:1.5rem}.flow li{padding:.35rem 0}.flow strong{color:var(--accent)}.number{display:block;color:var(--accent);font-size:.8rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:.4rem}footer{padding-top:2rem;font-size:.85rem;color:var(--muted)}@media(max-width:850px){.layout{grid-template-columns:1fr}nav{position:static;max-height:none;padding:1.2rem;display:flex;flex-wrap:wrap;gap:.2rem 1rem}nav strong{width:100%;margin:0}nav a{font-size:.8rem}main{border:0;padding-top:2rem}}@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}@media print{body,main{background:white;color:black;font-size:11pt}.layout{display:block}nav,.skip{display:none}main{border:0;padding:0}section{padding:1.2rem 0}h1{font-size:28pt}h2,h3,summary{break-after:avoid}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#eee;color:black;border:1px solid #aaa}a{color:inherit}.card,blockquote{break-inside:avoid}.table-wrap{overflow:visible}}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the guide</a>
+<div class="layout">
+<nav aria-label="Study guide sections">
+<strong>socket-lab / study notes</strong>
+<a href="#start">Start here</a>
+<a href="#stack">1. Who does what?</a>
+<a href="#tensors">2. Tensors and shapes</a>
+<a href="#learning">3. How learning works</a>
+<a href="#data">4. Text into training data</a>
+<a href="#lora">5. LoRA and frozen weights</a>
+<a href="#trainer">6. Inside Trainer</a>
+<a href="#hardware">7. Devices and memory</a>
+<a href="#inference">8. Inference and evaluation</a>
+<a href="#saving">9. Saving and resuming</a>
+<a href="#compile">10. Compilation and conversion</a>
+<a href="#map">11. Project source map</a>
+<a href="#labs">12. CPU practice labs</a>
+<a href="#debug">13. Debugging practice</a>
+<a href="#interview">14. Questions about the code</a>
+<a href="#sources">Sources and next steps</a>
+</nav>
+<main id="main">
+<header id="start">
+<p class="eyebrow">From a cartridge idea to understanding the code</p>
+<h1>PyTorch through this experiment.</h1>
+<p class="lead">These notes explain the PyTorch parts of the experiment. The aim is to follow the code, try small examples and be honest about what the results do and don't show.</p>
+<div class="callout"><strong>The short answer</strong><p>PyTorch supplied the tensors, automatic gradients, and GPU computations used to train the adapters. Hugging Face libraries supplied the model, adapter machinery, and training loop. Most saved translation evaluations used <strong>llama.cpp</strong>, a different inference engine.</p></div>
+<p>Reading the page isn't the same as understanding the code. Try the examples, change them and explain the results without looking at the answers.</p>
+<div class="grid">
+<div class="card"><span class="tag">First pass</span><h3>Start with the basics</h3><p>Read sections 1–6. Be able to describe one training step and follow the shapes of the data.</p></div>
+<div class="card"><span class="tag">Second pass</span><h3>Connect it to the repository</h3><p>Read sections 7–11 with the linked source files open. Separate library features from project-specific code.</p></div>
+<div class="card"><span class="tag">Practice</span><h3>Write, predict, explain</h3><p>Run the CPU examples, predict what the broken examples will do, then answer the questions in your own words.</p></div>
+</div>
+<p class="muted">Standalone page: no external scripts, fonts, accounts, or model downloads. Links open source files or documentation when you choose them. The Python labs are separate code you run yourself; the page does not execute them.</p>
+</header>
+
+<section id="stack">
+<span class="number">01 / The stack</span><h2>Which part is actually PyTorch?</h2>
+<p><strong>PyTorch is a library for numerical computation and machine learning.</strong> Think of it as arrays of numbers plus a system that can calculate how changing those numbers changes an error. It can perform many of those operations on a GPU.</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Library responsibilities"><table>
+<thead><tr><th scope="col">Layer</th><th scope="col">Its job here</th><th scope="col">What it did not mean</th></tr></thead><tbody>
+<tr><td>Project Python code</td><td>Choose examples, build prompts, mask labels, configure training, collect results.</td><td>A custom neural-network library.</td></tr>
+<tr><td>Hugging Face Datasets</td><td>Read Wikipedia and OPUS-100; prepare dataset rows.</td><td>PyTorch itself downloading or tokenizing text.</td></tr>
+<tr><td>Transformers</td><td>Load the Qwen model and tokenizer; provide <code>Trainer</code> and <code>generate()</code>.</td><td>Designing or pretraining Qwen from scratch.</td></tr>
+<tr><td>PEFT</td><td>Attach, load, train, merge, and save LoRA adapters.</td><td>Writing the LoRA library from scratch.</td></tr>
+<tr><td>PyTorch</td><td>Tensors, modules, parameters, gradients, numerical kernels, device handling, compilation.</td><td>Proof that the adapter idea worked.</td></tr>
+<tr><td>Accelerate / Trainer integration</td><td>Manage device placement, precision, and execution details behind the training loop.</td><td>Evidence that this project implemented distributed training.</td></tr>
+<tr><td>llama.cpp + sacreBLEU</td><td>Run the main saved inference comparisons; score text with chrF.</td><td>A PyTorch model evaluation loop for those saved runs.</td></tr>
+</tbody></table></div>
+<p>Using PyTorch through Transformers is still using a PyTorch-based system. The accurate description is <strong>adapter fine-tuning with a PyTorch-based Hugging Face stack</strong>, rather than “I implemented my own training framework.”</p>
+<p class="source">Project: <a href="../training/train_lora.py">train_lora.py</a>, <a href="../evaluation/eval_llama.py">eval_llama.py</a>. Library: <a href="https://huggingface.co/docs/transformers/v4.57.1/en/main_classes/trainer">Trainer documentation</a>.</p>
+</section>
+
+<section id="tensors">
+<span class="number">02 / The basic objects</span><h2>A tensor is an array with a shape, type, and device.</h2>
+<p>A number is a scalar. A list of numbers is a vector. A rectangular grid is a matrix. A <strong>tensor</strong> covers these and arrays with more dimensions.</p>
+<pre><code>import torch
+x = torch.tensor([[1.0, 2.0], [3.0, 4.0]])
+print(x.shape)   # torch.Size([2, 2]): two rows, two columns
+print(x.dtype)   # torch.float32
+print(x.device)  # cpu
+print(x * 2)    # multiply every entry by 2
+print(x @ x)    # matrix multiplication, not entry-by-entry multiplication</code></pre>
+<p>A <strong>parameter</strong> is a tensor registered as part of a model, normally eligible for learning. An <strong>activation</strong> is an intermediate result produced while processing an input. Parameters persist between examples; activations belong to the computation on particular inputs.</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Training tensor shapes"><table><caption>Shapes in the translation trainer</caption><thead><tr><th scope="col">Name</th><th scope="col">Typical shape</th><th scope="col">Meaning</th></tr></thead><tbody>
+<tr><td><code>input_ids</code></td><td><code>[B, 256]</code></td><td>Integer token IDs, not floating-point words. B is examples per microbatch.</td></tr>
+<tr><td><code>attention_mask</code></td><td><code>[B, 256]</code></td><td>1 for real input positions, 0 for padding.</td></tr>
+<tr><td><code>labels</code></td><td><code>[B, 256]</code></td><td>Target token IDs, with <code>-100</code> at positions excluded from loss.</td></tr>
+<tr><td><code>logits</code></td><td><code>[B, 256, V]</code></td><td>One unnormalized score per possible next token. V is the vocabulary size.</td></tr>
+<tr><td><code>loss</code></td><td>Scalar</td><td>The training error reduced to a single value for backpropagation.</td></tr>
+</tbody></table></div>
+<p>The model turns integer IDs into floating-point vectors using an <strong>embedding</strong> table. A token may be a word, part of a word, or punctuation. A 256-token limit is not a 256-word limit.</p>
+<details><summary>Why not convert the input IDs to BF16?</summary><p>They are indices into an embedding table. They need an integer type such as <code>torch.long</code>. BF16 is useful for floating-point model computations, not for replacing integer token IDs.</p></details>
+<p class="source">Project: <code>tokenize_completion</code> in <a href="../training/translation_data.py">translation_data.py</a>, shared by the translation trainers. Model interface: <a href="https://huggingface.co/docs/transformers/v4.57.1/en/model_doc/qwen3">Qwen3 documentation</a>.</p>
+</section>
+
+<section id="learning">
+<span class="number">03 / The training step</span><h2>Training is repeated prediction, error measurement, and adjustment.</h2>
+<ol class="flow">
+<li><strong>Forward pass:</strong> the model processes a batch and produces predictions.</li>
+<li><strong>Loss:</strong> compare predictions with the training targets.</li>
+<li><strong>Backward pass:</strong> autograd calculates gradients—how sensitive the loss is to each trainable parameter.</li>
+<li><strong>Optimizer step:</strong> use the gradients to adjust parameters.</li>
+<li><strong>Clear gradients:</strong> avoid unintentionally carrying them into the next update.</li>
+</ol>
+<p><strong>Autograd</strong> records differentiable operations during the forward pass. <code>loss.backward()</code> follows that graph backward and accumulates derivatives in parameter <code>.grad</code> fields. It does <em>not</em> update the weights. The optimizer performs the update.</p>
+<pre><code># A teaching sketch, not a literal copy of Trainer's implementation.
+optimizer.zero_grad(set_to_none=True)
+outputs = model(**batch)
+loss = outputs.loss
+loss.backward()
+optimizer.step()</code></pre>
+<p><strong>Learning rate</strong> controls the size of the update. Too large can make training unstable; too small can make progress slow. <strong>SGD</strong> follows the gradient directly. <strong>AdamW</strong> uses running estimates of gradients and their squared values, with separate weight decay. Those running estimates are optimizer state, not model weights.</p>
+<p>The project configures a learning rate and lets Trainer choose its optimizer implementation. It does not explicitly set <code>optim</code>; do not claim a particular fused optimizer ran everywhere without checking that run's library version and arguments.</p>
+<div class="callout"><strong>Know the difference between loss and chrF.</strong><p>Training minimizes next-token prediction loss. chrF is computed afterward from generated text and reference translations. The project does not backpropagate through chrF. A lower training loss does not guarantee better free-running translations.</p></div>
+<details><summary>Why clear gradients? Isn't backward supposed to replace them?</summary><p>PyTorch normally accumulates gradients. That is useful for gradient accumulation, but accidental accumulation changes the update. Clear them once per intended update cycle, not between microbatches you deliberately want to combine.</p></details>
+<p class="source">Official explanations: <a href="https://docs.pytorch.org/tutorials/beginner/basics/autogradqs_tutorial.html">autograd basics</a> and <a href="https://docs.pytorch.org/tutorials/beginner/basics/optimization_tutorial.html">optimization loop</a>.</p>
+</section>
+
+<section id="data">
+<span class="number">04 / The actual training examples</span><h2>What does the model get marked on?</h2>
+<p>A translation example contains a prompt and the expected completion. During training, it sees the correct earlier tokens while learning to predict the next one. This is often called <strong>teacher forcing</strong>. At generation time it must use its own earlier predictions instead.</p>
+<pre><code>Prompt:     Translate the following English text to Romanian.
+            English: Hello
+            Romanian:
+Completion: Salut
+
+Conceptual positions:   prompt  prompt  answer  answer  EOS  padding
+attention_mask:            1       1       1       1     1      0
+labels:                 -100    -100    token   token  EOS   -100</code></pre>
+<p><strong>The prompt is still visible.</strong> Setting its labels to <code>-100</code> excludes those targets from loss; it does not remove the prompt from the input. Padding has a different role: the attention mask marks padded input positions as unavailable for normal attention.</p>
+<p>A third mask—the model's <strong>causal attention mask</strong>—prevents looking ahead at future tokens. That is why including the answer tokens during training is not permission for a position to look at its own future target.</p>
+<h3>The one-token shift</h3>
+<p>The prediction at position 0 is compared with the target at position 1, and so on. The logit immediately before the first answer token predicts that answer token. Transformers handles this shift inside the causal-language-model loss. The project supplies unshifted labels; manually shifting them again would be wrong.</p>
+<p>Cross-entropy takes <strong>raw logits</strong> and target IDs; do not apply softmax first when using <code>torch.nn.functional.cross_entropy</code>. The loss's <code>ignore_index=-100</code> excludes the masked targets. <code>-100</code> is not a token to generate.</p>
+<div class="grid">
+<div class="card"><h3>Language adapters</h3><p><a href="../training/train_box.py">train_box.py</a> uses full blocks of Wikipedia tokens, normally 256 long. Labels copy the input IDs. There is no completion-only label mask or padding in these full blocks; the causal model still performs the next-token shift.</p></div>
+<div class="card"><h3>Translation adapters</h3><p><a href="../training/train_lora.py">train_lora.py</a> and <a href="../training/train_task.py">train_task.py</a> build both translation directions, pad to 256 positions, and mask prompt and padding labels. A collator stacks rows into PyTorch tensors.</p></div>
+</div>
+<h3>The end-of-text change</h3>
+<p>With <code>--eos_stop</code>, the monolith script reserves one position and appends a supervised end-of-sequence token, or <strong>EOS</strong>. It is a target that teaches a possible stopping point. Merely using the EOS token as padding does not teach stopping when those padding labels are ignored.</p>
+<p>The later adapter repeated text less often, but extra training and the target-format change happened together. That does not isolate which change caused the improvement.</p>
+<div class="callout warning"><strong>A real boundary bug:</strong> a long prompt could fill the token budget and leave no completion tokens to train on. The current scripts reject that condition. A completely ignored target batch has no useful supervised learning signal; a reduced loss can also become invalid. The regression tests use synthetic tokenizers, not a full corpus audit.</div>
+<p class="source">Project: <a href="../tests/test_training_tokens.py">token-label regression tests</a>. Library behavior: <a href="https://docs.pytorch.org/docs/2.14/generated/torch.nn.CrossEntropyLoss.html">CrossEntropyLoss</a>, <a href="https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/loss/loss_utils.py">Transformers ForCausalLMLoss source</a>.</p>
+</section>
+
+<section id="lora">
+<span class="number">05 / The cartridge mechanism</span><h2>LoRA learns a small adjustment, not a new base model.</h2>
+<p>A normal linear layer computes <code>y = W x</code>, ignoring the bias for this explanation. LoRA keeps W fixed and learns two smaller matrices, A and B:</p>
+<pre><code>y = W x + scale × B A x
+
+W: [output_features, input_features]  — frozen base weights
+A: [rank, input_features]             — trainable
+B: [output_features, rank]            — trainable
+scale = lora_alpha / rank            — ordinary LoRA scaling</code></pre>
+<p><strong>Rank</strong> is the size of the narrow intermediate dimension. For a hypothetical 1,024 × 1,024 layer, W contains 1,048,576 numbers. Rank-16 A and B contain 32,768 numbers together. That example is arithmetic, not a claim about a specific Qwen layer's dimensions.</p>
+<p>The project targets <code>q_proj</code>, <code>k_proj</code>, <code>v_proj</code>, and <code>o_proj</code>: attention's query, key, value, and output projections. In brief, queries and keys decide which earlier information to attend to; values carry that information; the output projection combines it. PEFT inserts the LoRA branches into those existing layers.</p>
+<p>The full language adapters use rank 16. The task and monolithic adapters use rank 32. The training scripts set <code>lora_alpha = 2 × rank</code> and <code>lora_dropout = 0.05</code>. Dropout randomly drops some values during training as regularization; evaluation mode disables it.</p>
+<h3>How freezing works</h3>
+<p><code>requires_grad=False</code> excludes a parameter from gradient accumulation. PEFT configures trainable adapter parameters for a fresh adapter. In the project's reload paths, a loop explicitly enables gradients on parameters whose names contain <code>lora_</code>, then verifies that some were found.</p>
+<pre><code># Actual pattern from the adapter reload path.
+for pname, param in model.named_parameters():
+    if "lora_" in pname:
+        param.requires_grad = True</code></pre>
+<p>That name-based rule is specific to the current adapter layout, not a universal freezing API. Inspect trainable names and counts instead of assuming that a successfully loaded adapter is trainable.</p>
+<div class="callout warning"><strong>Frozen does not mean “put the whole model in no_grad.”</strong><p>Gradients may need to flow through computations involving frozen layers to reach trainable adapter parameters. Disabling gradient recording for the entire forward pass would prevent adapter learning. LoRA reduces trainable weights and their optimizer state, but the base model still consumes memory and computation.</p></div>
+<h3>Why the separate-adapter comparison is tricky</h3>
+<p>The task trainer merges language adapters into a fresh base, then trains the task adapter over that base. Its historical PEFT <code>linear</code> merge combines the A and B factors, with weighting and scaling. Combining factors is not generally the same as adding complete adapter updates.</p>
+<pre><code># Simplified algebra showing the issue, with scaling omitted:
+(B1 + B2)(A1 + A2) = B1A1 + B1A2 + B2A1 + B2A2
+B1A1 + B2A2       = sum of the separate updates
+# The first expression has cross terms.</code></pre>
+<p>The llama.cpp comparisons stack adapter updates differently. This mismatch limits conclusions about whether independent cartridges are useful. It is not evidence that PyTorch's gradients are incorrect, and LoRA itself does not guarantee no forgetting.</p>
+<p class="source">Project: <a href="../training/train_task.py">train_task.py</a>. Background: <a href="https://huggingface.co/docs/peft/en/developer_guides/lora">PEFT LoRA guide</a>, <a href="https://huggingface.co/blog/peft_merging">PEFT merge algorithms</a>.</p>
+</section>
+
+<section id="trainer">
+<span class="number">06 / The loop you delegated</span><h2>Trainer did the repetitive work. You still need to understand it.</h2>
+<p><code>Trainer</code> builds the training data loader, runs batches through the model, requests gradients, updates weights, manages the learning-rate schedule, and writes checkpoints. The repository did not implement its own production calls to <code>loss.backward()</code> or <code>optimizer.step()</code>.</p>
+<p>A <strong>Dataset</strong> supplies examples. A <strong>DataLoader</strong> groups and iterates over them. A <strong>collator</strong> turns several examples into one batch. Here, <code>default_data_collator</code> stacks already prepared rows. It does not add the completion mask or pad arbitrary lengths for us.</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Trainer configuration"><table><caption>Read these settings in the source, not as unexplained magic</caption><thead><tr><th scope="col">Setting</th><th scope="col">Meaning here</th></tr></thead><tbody>
+<tr><td><code>per_device_train_batch_size=8</code></td><td>Default of eight examples in one microbatch on one device. CLI arguments can override it.</td></tr>
+<tr><td><code>gradient_accumulation_steps=4</code></td><td>Combine gradients from four microbatches before an optimizer update: nominally 32 examples on one device.</td></tr>
+<tr><td><code>num_train_epochs=2</code></td><td>A requested two passes over the prepared data unless a positive step limit takes precedence.</td></tr>
+<tr><td><code>max_steps</code></td><td>Optimizer-update limit, not number of individual examples. Used for short smoke tests and the tune-up.</td></tr>
+<tr><td><code>warmup_ratio=0.05</code>, cosine schedule</td><td>Increase the learning rate during an initial warmup, then decrease it along a cosine schedule.</td></tr>
+<tr><td><code>bf16=True</code></td><td>Request BF16 mixed-precision training through the framework.</td></tr>
+<tr><td><code>save_steps=500</code>, <code>save_total_limit=2</code></td><td>Periodic checkpoints with a bounded retained count. Final adapter saving is a separate call.</td></tr>
+<tr><td><code>remove_unused_columns=False</code></td><td>Keep our prepared batch columns. The journal reports that a compiled model's obscured signature otherwise caused Trainer to strip them.</td></tr>
+</tbody></table></div>
+<p>With accumulation, the important idea is to delay the optimizer update while combining gradients with the correct loss normalization. Do not blindly divide every framework loss by four: Trainer already handles accumulation, and valid-token counts matter for variable-length examples.</p>
+<p>With D devices, the usual nominal effective batch is <code>microbatch × accumulation × D</code>. That is general knowledge, not a claim that this project ran multi-GPU data parallelism. A final partial batch can also be smaller.</p>
+<div class="callout"><strong>A missing validation distinction:</strong> these training scripts pass a training dataset, not a held-out evaluation dataset to Trainer. There is no configured early stopping here. Final training loss is not a held-out translation score; the saved translation evaluations are a separate stage.</div>
+<p class="source">Project: the <code>TrainingArguments</code> and <code>Trainer</code> calls in <a href="../training/train_lora.py">train_lora.py</a>. Reference: <a href="https://huggingface.co/docs/transformers/v4.57.1/en/main_classes/trainer">Trainer 4.57.1</a>; exact defaults depend on the installed version.</p>
+</section>
+
+<section id="hardware">
+<span class="number">07 / Memory is more than weights</span><h2>Device, precision, and memory are separate choices.</h2>
+<p>A tensor has a device. <code>tensor.to("cuda")</code> returns a tensor on a CUDA GPU; assign or use the returned value. <code>model.to("cuda")</code> moves a module's parameters and buffers. Inputs and the operations consuming them must be on compatible devices.</p>
+<p>The training scripts load weights with <code>torch_dtype=torch.bfloat16</code> and request <code>bf16=True</code> in Trainer. BF16 uses 16 bits per value, with less precision than FP32 but a similar exponent range. The whole computation is not necessarily BF16: libraries may retain or upcast certain tensors and operations, including loss calculations.</p>
+<p>BF16 and FP16 are different 16-bit formats. BF16 usually does not need the gradient scaling commonly used with FP16. Neither format guarantees stability or a speedup on every device. The project scripts target suitable GPUs; do not expect their BF16 training setup to be a portable CPU tutorial.</p>
+<div class="grid"><div class="card"><h3>What uses memory?</h3><ul><li>Base and adapter weights.</li><li>Activations retained for backward.</li><li>Gradients and optimizer state.</li><li>Temporary buffers and allocator reservations.</li><li>During generation, the attention key/value cache.</li></ul></div><div class="card"><h3>When memory runs out</h3><ul><li>Reduce the microbatch first.</li><li>Consider shorter sequences.</li><li>Use accumulation if a larger effective batch is needed.</li><li>Check whether old models or graphs are still referenced.</li><li>Measure rather than assuming cache clearing fixes it.</li></ul></div></div>
+<p><code>torch.cuda.empty_cache()</code>, called between task-pair cycles, releases unused cached allocations. It cannot free live tensors. Even <code>del model</code> does not free an object if something else—such as the current Trainer—still holds it. This guide explains that limitation; it does not claim the existing cleanup is optimal.</p>
+<p><strong>Q8_0 is different again.</strong> It is a quantized model representation used for llama.cpp inference. Loading BF16 weights for PyTorch training and evaluating a Q8_0 GGUF model are different execution paths. This project did not thereby implement QLoRA training.</p>
+<p>Activation checkpointing trades recomputation for memory and is useful background knowledge, but these training scripts do not explicitly enable it. Do not confuse it with saving a training checkpoint to disk.</p>
+<p class="source">Project: <a href="../training/train_task.py">task cleanup</a>, <a href="../cloud/vast/provision.py">CUDA availability/version checks</a>. Official behavior: <a href="https://docs.pytorch.org/docs/2.14/generated/torch.cuda.memory.empty_cache.html">empty_cache</a>.</p>
+</section>
+
+<section id="inference">
+<span class="number">08 / Using the trained model</span><h2>eval() and inference_mode() solve different problems.</h2>
+<pre><code># Pattern used by the project's PyTorch probes.
+model.eval()
+with torch.inference_mode():
+    enc = tok(prompt, return_tensors="pt").to("cuda")
+    out = model.generate(**enc, max_new_tokens=128, do_sample=False)</code></pre>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Evaluation and gradient controls"><table><thead><tr><th scope="col">Control</th><th scope="col">What changes</th><th scope="col">What does not</th></tr></thead><tbody>
+<tr><td><code>model.eval()</code></td><td>Mode-dependent layers such as dropout switch to evaluation behavior.</td><td>It does not turn off autograd or freeze parameters.</td></tr>
+<tr><td><code>torch.no_grad()</code></td><td>Disables recording operations for backward within the context.</td><td>It does not put dropout into evaluation mode.</td></tr>
+<tr><td><code>torch.inference_mode()</code></td><td>Disables gradient recording and additional tracking overhead for inference.</td><td>It does not call <code>eval()</code>; tensors created there have restrictions on later autograd use.</td></tr>
+<tr><td><code>requires_grad=False</code></td><td>Controls whether a parameter participates as a gradient-accumulating leaf.</td><td>It does not switch model mode.</td></tr>
+</tbody></table></div>
+<p><code>generate()</code> repeatedly runs the model, selects another token, and continues until a stop condition. <code>do_sample=False</code> selects greedy decoding in these unconfigured-beam probe calls. It does not prove bit-for-bit reproducibility across hardware or software versions.</p>
+<p>Decoder-only generation returns the prompt tokens followed by generated tokens. The probes slice off <code>enc["input_ids"].shape[1]</code> before decoding. The legacy batched evaluator uses left padding so shorter prompts end at the same right-hand position in the batch.</p>
+<h3>Where this actually appears</h3>
+<ul>
+<li><a href="../evaluation/probe_terminate.py">probe_terminate.py</a>: six prompts, GPU model loading, greedy generation, generated-token and repetition diagnostics.</li>
+<li><a href="../cloud/modal/train_monolith.py">Modal monolith wrapper</a> and other training wrappers: small post-training probes using PyTorch.</li>
+<li><a href="../evaluation/eval_translate.py">eval_translate.py</a>: legacy PyTorch evaluator. It exists, but do not describe it as the engine behind all the banked chrF runs.</li>
+<li><a href="../evaluation/eval_llama.py">eval_llama.py</a>, <a href="../evaluation/eval_offline.py">eval_offline.py</a>, <a href="../evaluation/eval_pivot.py">eval_pivot.py</a>, and <a href="../evaluation/eval_scratchpad.py">eval_scratchpad.py</a>: request text from a llama.cpp server. They do not run a PyTorch forward pass themselves.</li>
+</ul>
+<p>chrF and the repeated-word diagnostic operate on text. Neither requires gradients. Repetition is not itself proof that a model failed to emit EOS: older evaluation records do not include the finish reasons needed to settle that.</p>
+<p class="source">Official distinction: <a href="https://docs.pytorch.org/docs/2.14/notes/autograd.html">autograd modes and evaluation mode</a>.</p>
+</section>
+
+<section id="saving">
+<span class="number">09 / What was actually saved?</span><h2>An adapter file is not a complete training checkpoint.</h2>
+<p>In plain PyTorch, a model's <code>state_dict()</code> maps parameter and persistent-buffer names to tensors. Saving model state is different from saving the Python model definition or a complete training process.</p>
+<p>Here, <code>model.save_pretrained(output)</code> on a PEFT model saves adapter weights and configuration, not another full copy of Qwen. Reloading needs a compatible base model and adapter configuration. The repository contains metadata and links; it does not contain all the model weights.</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Checkpoint distinctions"><table><thead><tr><th scope="col">Saved state</th><th scope="col">Why it matters</th></tr></thead><tbody>
+<tr><td>Model / adapter weights</td><td>Which parameters have been learned so far.</td></tr>
+<tr><td>Optimizer state</td><td>For example, Adam's running estimates; restarting them changes training.</td></tr>
+<tr><td>Scheduler and step count</td><td>Where the learning-rate schedule is and how many updates remain.</td></tr>
+<tr><td>Random-number and data progress state</td><td>Which examples, order, and random operations come next.</td></tr>
+</tbody></table></div>
+<p>The monolith script's <code>--resume_from</code> restores adapter weights and reads the previous step count to estimate remaining updates. It deliberately starts a fresh optimizer and scheduler, and restarts data order. That is <strong>continuing from learned weights</strong>, not an exact continuation of the interrupted process.</p>
+<p><code>--tune_from</code> is also a weight reload with fresh optimizer/scheduler, but uses an explicit step cap instead of subtracting prior steps. The EOS tune-up follows this pattern. The task script separately exposes Trainer checkpoint resume; it also depends on the expected task-adapter output directory being present. A full recovery test was not established by the earlier review.</p>
+<p>Seeds help, but a seed alone is not reproducibility. The project seeds Python sampling and passes a seed to TrainingArguments. That does not prove every model-initialization, GPU kernel, version, and data-order choice was identical. Be especially careful about initialization that occurs before a framework sets its random seed.</p>
+<p class="source">Project: <a href="../training/train_lora.py">resume/tune branches</a>, <a href="../training/train_task.py">task resume branch</a>, <a href="../adapters/eos-tune-001/run-info.json">EOS completion record</a>.</p>
+</section>
+
+<section id="compile">
+<span class="number">10 / Other PyTorch use</span><h2>Compilation and file conversion are not training methods.</h2>
+<h3>torch.compile</h3>
+<p><code>torch.compile(model)</code> tries to capture and optimize regions of model computation. The scripts use the default Inductor backend when <code>--compile</code> is enabled. Compilation has startup cost; unsupported operations can cause graph breaks or failures. It is not a promise of faster end-to-end runs.</p>
+<p>The journal reports compiled task runs and two short comparisons: plain/compiled took <strong>37/109 seconds</strong> on one host and <strong>80/214 seconds</strong> on another, with similar losses. Those short totals were slower with compilation. They don't show a speedup. A longer job might spread the startup cost over more work, but that was not shown by these short checks.</p>
+<p>The current training scripts make compilation optional. Vast run scripts enable it for task and monolith runs; the EOS tune-up scripts deliberately omit it. A particularly useful debugging lesson was Trainer removing dataset columns after compilation obscured the model's forward signature.</p>
+<h3>Adapter and model conversion</h3>
+<p>The bundled GGUF conversion code also uses PyTorch. It loads weight tensors, moves or loads them onto the CPU, changes dtypes, reshapes and permutes dimensions, joins or splits tensors, and exports data into the format llama.cpp expects. That is numerical file transformation, not another learning step.</p>
+<ul>
+<li><code>reshape</code> changes shape while retaining logical element order; <code>permute</code> reorders dimensions.</li>
+<li><code>view</code> has memory-layout requirements; a permuted tensor may need <code>contiguous()</code> before certain views.</li>
+<li><code>cat</code> joins an existing dimension; <code>stack</code> creates a new dimension.</li>
+<li><code>torch.load(..., map_location="cpu", weights_only=True)</code> limits weight loading and avoids requiring the original GPU. It is not permission to load arbitrary untrusted files.</li>
+<li>Safetensors loading is provided by the safetensors library. The result is still tensors used by the conversion code.</li>
+</ul>
+<details><summary>Advanced appendix: do I need to claim I wrote custom tensor machinery?</summary><p>No. The bundled converter includes <code>LoraTorchTensor</code>, <code>LazyTorchTensor</code>, <code>__torch_function__</code> dispatch, delayed materialization, and low-bit packing routines for multiple model formats. They are supporting conversion infrastructure. Recognize their role; do not present every supported format or operation as something this experiment exercised or as code you designed.</p></details>
+<p class="source">Project: <a href="../cloud/vast/run.py">compile smoke runner</a>, <a href="session-2026-10-20-vast.md">historical journal</a>, <a href="../vendor/llama_cpp/convert_lora_to_gguf.py">LoRA converter</a>, <a href="../vendor/llama_cpp/conversion/base.py">conversion base and lazy tensors</a>, <a href="../vendor/llama_cpp/gguf-py-b11146/gguf/lazy.py">bundled lazy-array support</a>. Official: <a href="https://docs.pytorch.org/docs/2.14/generated/torch.compile.html">torch.compile</a>.</p>
+</section>
+
+<section id="map">
+<span class="number">11 / Where to look</span><h2>Find each part in the source files.</h2>
+<p>This map covers the meaningful PyTorch roles in the project. It does not treat every operation in the bundled multi-model converter as a feature used in a recorded run.</p>
+<div class="table-wrap" tabindex="0" role="region" aria-label="Project PyTorch source inventory"><table><thead><tr><th scope="col">Source</th><th scope="col">What to find</th><th scope="col">What this shows</th></tr></thead><tbody>
+<tr><td><a href="../training/train_box.py">train_box.py</a></td><td>Wikipedia blocks, BF16 model, PEFT language adapter, Trainer.</td><td>Training implementation; language completion metadata is under <a href="../adapters/">adapters/</a>.</td></tr>
+<tr><td><a href="../training/train_task.py">train_task.py</a></td><td>Sequential pairs, factor merge, trainable-parameter flags, cache release.</td><td>Historical recipe with known comparison and resume limitations.</td></tr>
+<tr><td><a href="../training/train_lora.py">train_lora.py</a></td><td>Mixed translation examples, masked labels, EOS option, compile, manual resume.</td><td>Shared trainer for monolith and tune-up. CLI options are not proof every run used them.</td></tr>
+<tr><td><a href="../cloud/modal/train_box.py">cloud/modal/train_box.py</a>, <a href="../cloud/modal/train_task.py">train_task.py</a>, <a href="../cloud/modal/train_monolith.py">train_monolith.py</a>, <a href="../cloud/modal/train_smoke.py">train_smoke.py</a></td><td>GPU environment, invoke training scripts, PyTorch generation probes, result records.</td><td>Modal provides remote execution, not a new backpropagation algorithm.</td></tr>
+<tr><td><a href="../cloud/modal/train_eos_tune.py">cloud/modal/train_eos_tune.py</a></td><td>Load existing adapter for capped EOS training and invoke the termination probe.</td><td>Wrapper recipe. Use completion records/journal for actual-run claims.</td></tr>
+<tr><td><a href="../evaluation/probe_terminate.py">probe_terminate.py</a>, <a href="../evaluation/eval_translate.py">eval_translate.py</a></td><td>GPU tensor movement, eval/inference modes, generation and decoding.</td><td>Small probes / legacy evaluator, not the main llama.cpp scoring path.</td></tr>
+<tr><td><a href="../cloud/vast/">cloud/vast/</a></td><td>CUDA environment checks, compile comparisons, training launchers.</td><td>Provisioning and scripts, not evidence of DDP, custom CUDA, or production serving.</td></tr>
+<tr><td><a href="../vendor/llama_cpp/convert_lora_to_gguf.py">converter</a>, <a href="../vendor/llama_cpp/conversion/">conversion/</a></td><td>Tensor loading, shape/type transforms, lazy tensor infrastructure.</td><td>Bundled conversion support, not original model architecture work.</td></tr>
+<tr><td><a href="../tests/test_training_tokens.py">test_training_tokens.py</a></td><td>Check supervised labels at truncation boundaries.</td><td>Synthetic-tokenizer unit tests; not a real GPU training validation.</td></tr>
+</tbody></table></div>
+<div class="callout"><strong>Be precise about results.</strong><p>The later monolithic adapter scored 44.36 versus 38.98 for the original model on English→Romanian, and 59.34 versus 57.16 on Romanian→English. German→English was slightly lower, 59.90 versus 60.43. These are chrF scores, not percentages correct. Separate cartridges did not establish an advantage. See the <a href="../results/eval-board.csv">recorded table</a>.</p></div>
+</section>
+
+<section id="labs">
+<span class="number">12 / Learn by changing something</span><h2>Three small CPU labs. No model downloads.</h2>
+<p>Run each block separately with Python in an environment where PyTorch is already installed. If you need to install it, use the <a href="https://pytorch.org/get-started/locally/">official installation selector</a> for your platform and an isolated environment. These examples deliberately use CPU tensors, not the project's GPU training launchers.</p>
+<p><strong>Validation:</strong> these three exact blocks were run on CPU with PyTorch 2.12.0+cpu. The expected properties below are assertions in the examples. Small floating-point differences across versions are normal.</p>
+<h3>Lab A · Watch one weight learn</h3>
+<p>Before running: with weight 2 and input 3, the prediction is 6. The target is 9. Which direction should the weight move?</p>
+<pre data-exercise="scalar"><code>import torch
+
+weight = torch.nn.Parameter(torch.tensor(2.0))
+optimizer = torch.optim.SGD([weight], lr=0.05)
+x, target = torch.tensor(3.0), torch.tensor(9.0)
+initial_loss = ((weight * x - target) ** 2).item()
+
+for step in range(12):
+    optimizer.zero_grad(set_to_none=True)
+    loss = (weight * x - target) ** 2
+    loss.backward()
+    if step == 0:
+        print("first gradient:", weight.grad.item())
+        torch.testing.assert_close(weight.grad, torch.tensor(-18.0))
+    optimizer.step()
+
+final_loss = ((weight * x - target) ** 2).item()
+assert final_loss &lt; initial_loss
+print("weight:", round(weight.item(), 4))
+print("loss:", initial_loss, "-&gt;", final_loss)</code></pre>
+<details><summary>Expected result and a useful variation</summary><p>The first gradient is −18; subtracting a positive learning rate times that negative gradient increases the weight. It approaches 3 and the loss falls from 9 toward zero. Try learning rate 0.2: this simple problem becomes unstable. Explain why a bigger step is not automatically better.</p></details>
+
+<h3>Lab B · Train a tiny LoRA-like add-on</h3>
+<p>This is a teaching model, not Qwen or PEFT. It makes the frozen base, trainable matrices, DataLoader, and training loop visible. It uses mean-squared error because its targets are vectors, not token classes.</p>
+<pre data-exercise="adapter"><code>import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset
+
+torch.manual_seed(7)
+
+class TinyAdapter(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.base = nn.Linear(4, 3, bias=False)
+        self.base.requires_grad_(False)
+        self.a = nn.Linear(4, 2, bias=False)
+        self.b = nn.Linear(2, 3, bias=False)
+        nn.init.zeros_(self.b.weight)
+
+    def forward(self, x):
+        return self.base(x) + 2.0 * self.b(self.a(x))
+
+model = TinyAdapter()
+x = torch.randn(24, 4)
+y = torch.zeros(24, 3)
+loader = DataLoader(TensorDataset(x, y), batch_size=6, shuffle=True)
+optimizer = torch.optim.SGD(
+    [p for p in model.parameters() if p.requires_grad], lr=0.05
+)
+base_before = model.base.weight.detach().clone()
+b_before = model.b.weight.detach().clone()
+with torch.no_grad():
+    initial_loss = nn.functional.mse_loss(model(x), y).item()
+
+model.train()
+for epoch in range(40):
+    for batch_x, batch_y in loader:
+        optimizer.zero_grad(set_to_none=True)
+        loss = nn.functional.mse_loss(model(batch_x), batch_y)
+        loss.backward()
+        optimizer.step()
+
+model.eval()
+with torch.inference_mode():
+    final_loss = nn.functional.mse_loss(model(x), y).item()
+
+assert model.base.weight.grad is None
+assert torch.equal(base_before, model.base.weight)
+assert not torch.equal(b_before, model.b.weight)
+assert final_loss &lt; initial_loss
+print("base unchanged; adapter changed")
+print("loss:", initial_loss, "-&gt;", final_loss)</code></pre>
+<details><summary>What should I be able to explain?</summary><p>Input is [6, 4] for each full batch; A produces [6, 2]; B produces [6, 3]; the base also produces [6, 3], so addition is valid. Only adapter parameters enter the optimizer. The frozen base still contributes to predictions. <code>detach().clone()</code> makes an independent snapshot for the comparison.</p><p>Because B starts at zero, the add-on initially contributes zero. A can have a zero gradient on the first backward pass because the signal to A passes through B. That does not mean the whole adapter is broken. This toy intentionally omits dropout, tokenization, attention, and checkpointing.</p></details>
+
+<h3>Lab C · See exactly which tokens contribute to loss</h3>
+<p>The token IDs below are invented. This isolates the loss rule; it does not load a tokenizer. We manually shift here to teach what the model normally does internally.</p>
+<pre data-exercise="mask"><code>import torch
+from torch.nn import functional as F
+
+torch.manual_seed(3)
+# Positions: prompt, prompt, answer, answer, EOS, padding
+labels = torch.tensor([[-100, -100, 31, 32, 2, -100]])
+logits = torch.randn(1, 6, 40, requires_grad=True)
+
+shift_logits = logits[:, :-1, :].contiguous()
+shift_labels = labels[:, 1:].contiguous()
+loss = F.cross_entropy(
+    shift_logits.view(-1, 40),
+    shift_labels.view(-1),
+    ignore_index=-100,
+)
+loss.backward()
+
+active = logits.grad.abs().sum(dim=-1).squeeze(0) &gt; 0
+assert active.tolist() == [False, True, True, True, False, False]
+assert (shift_labels != -100).sum().item() == 3
+print("logit positions with gradient:", active.nonzero().flatten().tolist())
+print("three targets: first answer, second answer, EOS")</code></pre>
+<details><summary>Why does the final prompt position get a gradient?</summary><p>Its logit predicts the first answer token. The loss masks target positions, not every computation associated with a prompt token. This is the distinction between “don't grade the prompt as a target” and “don't use the prompt.” Try changing the EOS label to −100 and predict the new active positions before running it.</p></details>
+</section>
+
+<section id="debug">
+<span class="number">13 / Troubleshooting</span><h2>Practice saying what you would inspect first.</h2>
+<details><summary>“The loss has no grad_fn” or backward says it does not require grad.</summary><p>Check whether trainable parameters exist, whether the forward pass was inside no_grad/inference_mode, and whether loss was detached or converted to a Python number before backward. In this project, inspect the adapter reload and trainable-parameter count. Do not randomly unfreeze every base weight to make the error disappear.</p></details>
+<details><summary>The GPU runs out of memory halfway through.</summary><p>Inspect batch and sequence lengths, live tensor references, and whether you store whole loss tensors instead of detached scalar values. Compare allocated versus reserved memory. Reduce the microbatch if needed; accumulation does not remove the need to fit one microbatch. empty_cache cannot free tensors still referenced by a Trainer.</p></details>
+<details><summary>“Expected all tensors to be on the same device.”</summary><p>Print model/input devices. Move the inputs using the returned value from <code>.to(device)</code>. The small probes explicitly move both model and tokenized input to CUDA; Trainer handles placement in the training path. Do not blindly move a deliberately sharded model to one GPU.</p></details>
+<details><summary>“mat1 and mat2 shapes cannot be multiplied.”</summary><p>Write down the last input dimension and the layer's input feature count. For a linear layer, input [..., in_features] meets weights [out_features, in_features]. Transposing or reshaping without understanding the dimensions can hide the mistake rather than fix it.</p></details>
+<details><summary>Training loss decreases, but generation repeats.</summary><p>Training uses correct earlier tokens; generation uses its own. Inspect target formatting, EOS supervision, stopping settings, data quality, and generated samples. A low teacher-forced loss does not certify good generation. The project found less repetition after a tune-up, but did not isolate its cause.</p></details>
+<details><summary>Training behaves differently after a restart.</summary><p>Ask what was restored: weights only, or optimizer, scheduler, random state, and data progress too? The monolith's manual resume restarts several of these. A saved step number alone cannot restore them.</p></details>
+<details><summary>The compiled model fails inside Trainer before learning.</summary><p>Inspect the input batch keys and the model signature seen by Trainer. The repository records a column-removal problem and keeps prepared columns with <code>remove_unused_columns=False</code>. That is a fix for this interface mismatch, not a universal way to resolve compiler errors.</p></details>
+</section>
+
+<section id="interview">
+<span class="number">14 / Explain, don't recite</span><h2>Questions about the code.</h2>
+<h3>A short account of the experiment</h3>
+<blockquote>I explored whether small adapters could act like cartridges for an existing language model. I used a PyTorch-based Transformers and PEFT stack to train adapters for translation. Trainer handled the optimization loop; the project code prepared the examples, controlled which labels contributed to loss, and configured training. The single adapter improved some recorded translation scores, but separate cartridges did not demonstrate an advantage.</blockquote>
+<p>The runs show what the experiment did. They don't show that I wrote the libraries or understand every part of them.</p>
+<div class="grid"><div class="card"><h3>The short version</h3><p>A translation-adapter experiment using PyTorch, Hugging Face Transformers and PEFT. It compares saved translations with the base model using chrF.</p><p class="muted">This wasn't a production deployment, a distributed-training project or a test of custom GPU kernels. It didn't prove that the cartridge idea works.</p></div><div class="card"><h3>What not to claim</h3><ul><li>“I trained Qwen from scratch.”</li><li>“I wrote the Trainer or LoRA implementation.”</li><li>“The cartridges prevented forgetting.”</li><li>“torch.compile gave a proven speedup.”</li><li>“44.36 chrF means 44.36% accurate.”</li></ul></div></div>
+<h3>Answer these before opening the explanations</h3>
+<details><summary>1. What did PyTorch do that plain Python lists did not?</summary><p>Efficient tensor operations, hardware-backed computation, model/parameter abstractions, and automatic differentiation. The surrounding Python code arranged data and called these systems.</p></details>
+<details><summary>2. What is the difference between backward and optimizer.step?</summary><p>Backward computes and accumulates gradients. The optimizer uses those gradients and any optimizer state to update parameters. Neither operation should be confused with measuring chrF.</p></details>
+<details><summary>3. Why use LoRA instead of updating all the weights?</summary><p>It trains and stores a smaller set of parameters, reducing adapter storage and optimizer-state needs. It still needs the base model and forward/backward computation; it does not automatically preserve every capability or make independent adapters compose well.</p></details>
+<details><summary>4. What is a batch, epoch, and step in this project?</summary><p>A microbatch is a group processed in one forward/backward pass. An epoch is one pass over the prepared dataset. An optimizer step updates the weights, potentially after several microbatches. With defaults 8 and 4 on one device, a full update nominally combines 32 examples.</p></details>
+<details><summary>5. Why are labels different from input_ids?</summary><p>The prompt and padding still occupy input positions, but their labels are −100 to exclude them from the supervised target loss. The answer tokens—and EOS when enabled—are the graded targets. Transformers performs the next-token shift.</p></details>
+<details><summary>6. Why do you need both eval() and inference_mode()?</summary><p>One changes layer behavior such as dropout; the other disables gradient recording and related tracking. They are independent.</p></details>
+<details><summary>7. Did all the saved evaluations use PyTorch?</summary><p>No. PyTorch was used for training and small generation probes, and there is a legacy PyTorch evaluator. The main banked comparisons requested generations from llama.cpp and scored the text separately.</p></details>
+<details><summary>8. What mistake or limitation can you explain concretely?</summary><p>Choose one you understand: all-masked completion labels at the token limit; weights-only resume not restoring optimizer state; or the mismatch between combining LoRA factors during training and stacking updates during evaluation. Explain the failure, not just the fix name.</p></details>
+<details><summary>9. How would you check that an adapter actually learned?</summary><p>Verify trainable parameters and nonzero useful gradients, compare adapter weights before/after, inspect loss and generated examples, and evaluate held-out outputs against a baseline. The toy lab checks parameter changes; it is not a translation-quality test.</p></details>
+<details><summary>10. Why can a fixed random seed still give different results?</summary><p>Versions, hardware, nondeterministic operations, initialization timing, and data ordering can differ. An exact restart also needs more than model weights. The recorded environment is not fully pinned.</p></details>
+<details><summary>11. Can you write a small training loop without Trainer?</summary><p>You should be able to recreate Lab B: dataset/data loader, model, loss, optimizer, clear gradients, forward, backward, step, then eval with gradients disabled. If you cannot yet, say your experience is with Trainer and keep practicing this part.</p></details>
+<h3>Things to try without the answers</h3>
+<ul>
+<li>Explain tensor shapes and one optimizer update without reading this page.</li>
+<li>Recreate a small CPU training loop and make a parameter stay frozen.</li>
+<li>Explain all three masks: padding, causal attention, and ignored target labels.</li>
+<li>Open the project source and locate each claimed use.</li>
+<li>Explain one failure and the limits of the result without exaggeration.</li>
+</ul>
+<p>These checks help with the basics. They don't show experience with distributed training, custom gradient code, deployment or large-scale profiling. Those need separate practice.</p>
+</section>
+
+<section id="sources">
+<h2>Sources and what to study next</h2>
+<p>This guide was grounded in the project source at commit <code>6bf93c8063ad837c0f7f464d536df191c3e2182d</code>, its saved result table, adapter metadata, and historical journal. Source links above are relative to this page in <code>docs/</code>. Old journal explanations are historical evidence, not guarantees of correctness.</p>
+<p>Official documentation was inspected for the concepts below. PyTorch documentation is version 2.14 where linked; Trainer and causal-loss references use Transformers 4.57.1. The small CPU labs use PyTorch 2.12.0+cpu. These references explain behavior; they do not pin every historical project environment.</p>
+<ol>
+<li><a href="https://docs.pytorch.org/tutorials/beginner/basics/autogradqs_tutorial.html">PyTorch: automatic differentiation</a> — gradients, computation graphs, and requires_grad.</li>
+<li><a href="https://docs.pytorch.org/tutorials/beginner/basics/optimization_tutorial.html">PyTorch: optimization</a> — loss, gradients, and optimizer updates.</li>
+<li><a href="https://docs.pytorch.org/docs/2.14/generated/torch.nn.CrossEntropyLoss.html">CrossEntropyLoss</a> — logits, targets, and ignore_index.</li>
+<li><a href="https://docs.pytorch.org/docs/2.14/notes/autograd.html">Autograd mechanics</a> — freezing, no-grad, inference mode, and eval mode.</li>
+<li><a href="https://docs.pytorch.org/docs/2.14/generated/torch.compile.html">torch.compile</a> — compilation behavior and graph boundaries.</li>
+<li><a href="https://docs.pytorch.org/docs/2.14/generated/torch.cuda.memory.empty_cache.html">CUDA empty_cache</a> — unused cache versus live allocations.</li>
+<li><a href="https://huggingface.co/docs/transformers/v4.57.1/en/main_classes/trainer">Hugging Face Trainer</a> — framework-owned training and configuration.</li>
+<li><a href="https://github.com/huggingface/transformers/blob/v4.57.1/src/transformers/loss/loss_utils.py">Transformers causal-loss source</a> — where the next-token shift happens.</li>
+<li><a href="https://huggingface.co/docs/peft/en/developer_guides/lora">PEFT LoRA</a> and <a href="https://huggingface.co/blog/peft_merging">adapter merging</a> — small updates and composition semantics.</li>
+</ol>
+<p><strong>Next step:</strong> start with Lab A. Before running it, write down the prediction, loss, gradient sign, and expected weight movement. Then do the same for Lab B's tensor shapes. That is a better way to learn this code than memorizing library names.</p>
+</section>
+<footer><p>Study scope: the mechanisms used or exposed by socket-lab, with unrelated advanced topics clearly separated. No training job or cloud service is started by this page. Open the practice answers before printing if you want them included in your printout.</p></footer>
+</main>
+</div>
+</body>
+</html>
