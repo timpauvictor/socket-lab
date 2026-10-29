@@ -54,7 +54,7 @@ def main() -> int:
     ap.add_argument("--pairs", required=True)
     ap.add_argument("--model", required=True)
     ap.add_argument("--run_id", required=True, help="Stable identity of weights, adapters and backend")
-    ap.set_defaults(strategy="scratchpad")
+    ap.set_defaults(strategy="scratchpad", pivot=None)
     ap.add_argument("--src", default="de")
     ap.add_argument("--pivot", default="en")
     ap.add_argument("--tgt", default="fr")
@@ -67,11 +67,11 @@ def main() -> int:
     args = ap.parse_args()
 
     validate_args(ap, args)
-    pairs = load_pairs(args)
+    pairs = load_pairs(Path(args.pairs), src=args.src, tgt=args.tgt, split=args.split)
     meta = build_meta(args)
     output = Path(args.output)
     check_server(args.base_url.rstrip("/"), args.model, args.request_timeout)
-    stream, completed = open_records(output, meta, args.overwrite)
+    stream, completed = open_records(output, meta, args.overwrite, expected_pairs=pairs)
 
     done = 0
     followed = 0

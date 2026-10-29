@@ -6,6 +6,8 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 LANG_NAMES = {"ro": "Romanian", "en": "English", "fr": "French", "de": "German"}
+MAX_TRAIN_TOKENS = 256
+PAIRED_CONTENT_TOKENS = MAX_TRAIN_TOKENS - 1
 
 
 def find_config(src: str, tgt: str, names: list[str]) -> str:
@@ -47,17 +49,71 @@ def translation_examples(src: str, tgt: str, rows: Iterable[tuple[str, str]]) ->
     return examples
 
 
+def completion_boundary(offsets: list[tuple[int, int]], prompt_chars: int) -> int:
+    for index, (_, end) in enumerate(offsets):
+        if end > prompt_chars:
+            return index
+    return len(offsets)
+
+
+def prepare_control_pairs(src: str, tgt: str, rows: list[tuple[str, str]],
+                          tokenizer: Any) -> tuple[list[tuple[str, str]], list[dict[str, Any]]]:
+    """Exclude a whole selected pair if either direction cannot supervise content.
+
+    The original selection/order is retained separately by the caller. No backfill
+    or content rewriting occurs. Both controls consume this one frozen result.
+    """
+    kept = []
+    excluded = []
+    for start in range(0, len(rows), 512):
+        batch = rows[start:start + 512]
+        examples = translation_examples(src, tgt, batch)
+        encoded = tokenizer([p + c for p, c in examples], truncation=True,
+                            max_length=PAIRED_CONTENT_TOKENS, return_offsets_mapping=True)
+        invalid = {}
+        for index, ((prompt, _), ids, offsets) in enumerate(zip(
+                examples, encoded["input_ids"], encoded["offset_mapping"], strict=True)):
+            if completion_boundary(offsets, len(prompt)) >= len(ids):
+                invalid.setdefault(index // 2, []).append(index % 2)
+        for index, row in enumerate(batch):
+            if index in invalid:
+                excluded.append({"selected_pair_index": start + index, "directions": invalid[index],
+                                 "reason": "no_completion_within_paired_content_budget"})
+            else:
+                kept.append(row)
+        if start % 25600 == 0:
+            print(f"  token-budget check {src}-{tgt}: {start + len(batch)}/{len(rows)} pairs; "
+                  f"{len(excluded)} excluded", flush=True)
+    return kept, excluded
+
+
 def tokenize_completion(example: Mapping[str, str], *, tokenizer: Any,
-                        eos_stop: bool = False) -> dict[str, list[int]]:
-    max_len = 256
-    # EOS is an explicit supervised target only for the opt-in tune-up.
-    eos = [tokenizer.eos_token_id] if eos_stop else []
-    if eos_stop and tokenizer.eos_token_id is None:
-        raise SystemExit("tokenizer has no EOS token; --eos_stop needs one")
-    full_ids = tokenizer(example["prompt"] + example["completion"],
-                         truncation=True, max_length=max_len - len(eos))["input_ids"]
+                        eos_stop: bool = False,
+                        paired_control: bool = False) -> dict[str, list[int]]:
+    max_len = MAX_TRAIN_TOKENS
+    # Reserve one slot for both paired controls, even when EOS is not supervised.
+    content_budget = max_len
+    if eos_stop or paired_control:
+        content_budget -= 1
+    eos = []
+    if eos_stop:
+        if tokenizer.eos_token_id is None:
+            raise SystemExit("tokenizer has no EOS token; --eos_stop needs one")
+        eos = [tokenizer.eos_token_id]
+    if paired_control:
+        # A boundary token can contain both the prompt's trailing space and the
+        # first completion word. Standalone prompt length would mask that word.
+        encoded = tokenizer(example["prompt"] + example["completion"], truncation=True,
+                            max_length=content_budget, return_offsets_mapping=True)
+        full_ids = encoded["input_ids"]
+        plen = completion_boundary(encoded["offset_mapping"], len(example["prompt"]))
+    else:
+        # Preserve the historical masking recipe for existing callers.
+        full_ids = tokenizer(example["prompt"] + example["completion"],
+                             truncation=True, max_length=content_budget)["input_ids"]
+        plen = len(tokenizer(example["prompt"], truncation=True, max_length=max_len)["input_ids"])
+    # Add the optional target, then mask the prompt and pad the fixed-size row.
     full_ids = full_ids + eos
-    plen = len(tokenizer(example["prompt"], truncation=True, max_length=max_len)["input_ids"])
     plen = min(plen, len(full_ids))
     if plen >= len(full_ids) - len(eos):
         raise ValueError("Prompt leaves no completion tokens within the 256-token budget")

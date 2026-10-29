@@ -153,3 +153,191 @@ The [historical journal](../../docs/session-2026-10-20-vast.md) preserves its
 original commands and measurements. Python replacements have local tests with fake cloud calls,
 including failure cases. A real cloud check still needs an explicitly approved
 run. Passing code tests is not a training result.
+
+## EOS-only task-adapter tune-up (separate workflow)
+
+Preparing files locally does not give permission to use a paid host. Do not use `run.py eos-tune`,
+`upload.py`, or the adapter-only finalizer for this experiment. Its package keeps
+repository-relative paths, not the historical flat `scripts/` layout.
+
+### Read-only local preview
+
+From the repository root, with an existing Python environment (no installation):
+
+```text
+python -B cloud/vast/task_eos_experiment.py run --repo . --output _tools/eos-preview --run-id eos-preview --destination OWNER/eos-preview --full --dry-run
+python -B cloud/vast/task_eos_experiment.py stage-list --repo .
+```
+
+`-B` also prevents Python import-cache writes. The first command only prints
+argv: no output directories, processes, network, model/data downloads, packages,
+training or instance operations. Revision placeholders are deliberate in preview;
+checks before a real run reject them. The second prints an explicit staging allowlist.
+
+This workflow trains ONE EOS-enabled copy of the finished task adapter.
+See the [workflow summary](../../docs/controlled-task-eos-experiment.md). It does
+not rebuild cartridges or train a no-EOS control. Original weights stay untouched.
+
+The supervisor freezes inputs/selected OPUS rows, then runs a disposable EOS smoke
+at 3 steps per pair. With `--full`, it starts again from ORIGINAL task weights,
+not smoke weights, and performs 333/333/334 steps across ro-en/fr-en/de-en: 1,000
+updates total, both directions, with only the task LoRA trainable. The existing
+modular trainer restarts its optimizer/scheduler per pair; this is not the old
+monolith's mixed-dataset schedule.
+
+Each phase checks original versus EOS-tuned on the first TWO saved examples in
+each of en-ro, ro-en and de-en: six inputs per adapter, twelve attempts per phase.
+Internal evaluator IDs A/C mean original/EOS-tuned, not additional training arms.
+Both use the same frozen linear-factor cartridge composition as training.
+Decoding is BF16 Transformers/PEFT, greedy, EOS-or-128-token-cap, no newline stop.
+Raw/token evidence, repetition and failures are preserved. Tiny diagnostic chrF
+is not a general quality benchmark or a causal EOS claim. Missing/error rows make
+the diagnostic incomplete. French is trained but not generation-checked.
+The final adapter is `OUTPUT/bundle/full/task-eos/`, with product identity in
+`request.json`. Smoke-only success is not a finished EOS adapter.
+
+Opt-in training labels use the fast tokenizer's character offsets on the JOINT
+prompt/completion text. A token containing the prompt's trailing space and the
+first completion word is supervised, not mistaken for prompt-only content.
+This retains completion content and does not rewrite source text. Historical non-paired masking is unchanged. Frozen preparation
+preserves each raw selection as `PAIR.selected.json`, then excludes an ENTIRE
+pair if either direction has no completion token within the
+unchanged 255-token content budget. `PAIR.excluded.json` records original indices,
+directions and reasons; `PAIR.json` keeps the remaining order without backfill.
+Raw/usable/excluded counts and all file hashes remain in the bundle.
+
+### Required before any live operation
+
+Get explicit approval to upload, install, run and stop. Record the SSH host,
+port, user and instance ID. Choose a NEW private Hugging Face `OWNER/RUN_ID`
+destination. Set the time limit in seconds, GPU price per hour and maximum
+spend, using the same currency for both prices. Supply credentials through
+private environment/tooling only. Confirm dataset/model access and private output
+write permission. No credentials belong in notes, source, argv or archives.
+
+Resolve ONE base/tokenizer commit and ONE OPUS-100 commit to 40-hex revisions.
+Inspect the five required adapter origins (four cartridges and task-full),
+including source revisions/run receipts. Compare both config and weight SHA-256
+values against those origins. The unrelated monolith EOS adapter is not required
+or loaded. Local file presence alone does not prove source identity.
+
+Prepare a private `provenance.json` object with keys `box-ro`, `box-en`, `box-fr`,
+`box-de`, `task-full`. Each entry has this shape (replace placeholders):
+
+```json
+{"source":"OWNER/REPOSITORY or recorded immutable artifact source",
+ "revision":"40-hex-source-commit",
+ "evidence":"where/how these source bytes and run metadata were inspected",
+ "sha256":{"adapter_config.json":"64-hex", "adapter_model.safetensors":"64-hex"}}
+```
+
+For the original Modal language boxes, use `source_type: "modal_manifest"`
+instead of a fabricated Hub revision. Set `source` to
+`modal-volume:VOLUME:VOLUME_PATH`, and include `run_id`, `manifest_sha256`,
+`evidence` and the same two-file `sha256` object. The freezer validates the
+original `_COMPLETE.json` bytes, completed rank-16 run/base/language/source identity,
+and both recorded file hashes. Say whether you checked an old local receipt or independently checked the
+remote files. Those are different checks.
+
+Do not put secrets in this file. If hashes or source records disagree, stop
+before training. Recording the checks does not independently prove the sources
+are authentic. Do not mark an entry as checked if you could not verify it.
+
+Read `/etc/vast-agents-guide.md` on the approved host. Check the selected Python,
+CUDA/PyTorch/BF16, available RAM/disk, package versions, model/tokenizer access,
+instance-only stop credentials, Vast stop transport and private artifact access.
+For THIS experiment, after installation approval, use the scoped historical stack:
+
+```text
+uv pip install --python /venv/main/bin/python -r cloud/vast/task-eos-requirements.txt
+uv pip check --python /venv/main/bin/python
+/venv/main/bin/python -B -c "import torch, transformers, peft, datasets, accelerate, huggingface_hub, sacrebleu; print('Training and evaluation imports passed')"
+```
+
+Inspect the installation preview first; do not replace the working CUDA/Torch
+stack. Datasets 5.1 requires a Hub API absent from Hub 0.36, while Transformers
+4.57 requires Hub below 1.0. Therefore pin Datasets 5.0.1 with the historical
+Transformers/PEFT stack rather than leaving the image's newer Datasets installed.
+Validate ALL actual imports, not package-presence metadata alone, before launch.
+The local preparation environment does not prove GPU/PEFT compatibility. Suggested starting class is 24 GB VRAM / 32 GB RAM / 80 GB free disk,
+not a measured minimum. The user must approve a real check of the stop mechanism. Do not test it by
+unexpectedly stopping an active run.
+
+### Staging after approval only
+
+Use the printed `stage-list` as an archive allowlist, keeping its relative paths.
+For example, in a shell with `tar`, redirect that list to a private local file,
+then `tar -cf PACKAGE.tar -T LIST.txt`. Add the inspected `provenance.json`
+separately. Preview the list before doing this; it includes the five adapters,
+three read-only pair logs, code and any existing adapter run receipts, NOT tokens,
+`.env`, a model cache, unrelated results or this repository's Git data.
+Upload only that package to an explicitly approved FRESH instance directory and
+extract there (for example `/workspace/eos-code-RUN_ID`). Do not overlay an older
+experiment. Compare staged config/weight hashes with the provenance file before
+running. No staging/SSH command has been executed during local preparation.
+
+### Instance command preview and approved execution
+
+Replace the paths, revisions, repository owner, RUN_ID and budget placeholders.
+First preview with the selected instance interpreter:
+
+```text
+/venv/main/bin/python -B /workspace/eos-code-RUN_ID/cloud/vast/task_eos_experiment.py run --repo /workspace/eos-code-RUN_ID --output /workspace/eos-RUN_ID --run-id RUN_ID --destination OWNER/RUN_ID --model-revision MODEL_COMMIT --dataset-revision OPUS_COMMIT --provenance /workspace/provenance.json --max-seconds SECONDS --max-cost COST --hourly-rate RATE --full --dry-run
+```
+
+Only after explicit execution approval: replace `--dry-run` with `--approved-live`.
+`--full` authorizes the serial full stage after successful smoke. Without it,
+only smoke runs, uploads and stops; it does NOT leave a billable host running.
+A separately requested smoke-only session and any later full session need distinct
+run IDs/destinations and an explicit budget decision (full repeats its own smoke).
+If memory needs a different microbatch/accumulation, STOP and settle a matched
+change before full training; the current runner deliberately fixes 8 x 4.
+Measure smoke time/memory and review losses/update receipts before authorizing
+full execution when those measurements are not already available.
+
+The supervisor preserves every pair's adapter, checkpoints, logs, selected rows,
+input copies, source hashes, runtime/package/hardware metadata, all evaluation
+files, score JSON/report and completion/failure record under `OUTPUT/bundle/`.
+It does not resume training automatically or publish banked scores. It rejects
+existing outputs and existing destination repositories. Standalone evaluator
+`--resume` is matching-only, validates source text/token evidence and keeps errors
+incomplete; it is not an automatic supervisor recovery path.
+
+An independent watchdog enforces the earlier of the elapsed-time ceiling and
+`max_cost / hourly_rate`, through finalization. The supervisor reserves the final
+60 seconds for failure finalization; this is not a guarantee that a large upload
+will fit. It logs active stages every ten seconds; the guard also catches a dead
+supervisor after one hour inactivity. Failed stages/cancellation/upload still
+attempt instance-scoped stop. Failed stop leaves the guard retrying. No destroy
+operation exists. The spend calculation is an estimated GPU-rate bound, not proof
+of total provider/storage/network billing; approve those separately as needed.
+
+### Bundle retrieval and remaining live checks
+
+Finalization seals every nested bundle file with size/SHA-256, creates a NEW
+private repository, uploads, then downloads ALL files at the returned immutable
+commit and compares hashes (not just weight sizes). The local bundle is never
+removed, including on upload failure. Frozen inputs have their own nested manifest.
+After approved retrieval, run this read-only check with the staged code:
+
+```text
+python -B cloud/vast/task_eos_artifacts.py verify RETRIEVED_BUNDLE
+```
+
+Also retrieve `OUTPUT/finalize.stdout.log`, `finalize.stderr.log`, `closeout.json`
+and the live `progress.log`/`watchdog.log` from disk. These necessarily postdate the
+sealed bundle and are retained beside it, not falsely claimed inside its hash
+manifest. `finalize.stdout.log` gives the verified remote commit and manifest hash;
+`closeout.json` reports stop/upload acknowledgments separately from the bundle's
+pre-finalization completion snapshot. An interrupted finalizer can leave the remote
+upload present but unverified; inspect/retrieve rather than reusing the destination
+or automatically retraining. A failed upload can have NO remote recovery copy.
+
+Remaining live evidence: source provenance, resolved revisions/data selection;
+real task-weight load, finite gradients/loss, task updates and unchanged frozen
+weights in the three-pair EOS smoke; memory/time; stop-mechanism acceptance;
+exactly 1,000 full optimizer steps; the small original/EOS diagnostic and matching
+IDs; bundle and final-adapter retrieval hashes; final stop receipt; and the user's
+dashboard confirmation that GPU billing ceased. Stopped storage may still bill.
+Do not claim universal EOS termination or improved translation quality from six
+inputs. Report regressions honestly; local tests are not live training results.

@@ -59,7 +59,7 @@ def command_for(args: argparse.Namespace) -> list[str]:
         cli.append("--score_only")
     deps = ["run", "--no-project", "--with", "sacrebleu==2.6.0"]
     if not args.score_only:
-        deps += ["--with", "datasets"]
+        deps += ["--with", "datasets", "--with", "requests==2.34.2"]
     return [executable, *deps, "--", "python", *cli]
 
 

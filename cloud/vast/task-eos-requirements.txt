@@ -1,0 +1,9 @@
+# Controlled EOS experiment only. Keep the host's working CUDA/PyTorch stack.
+# Datasets 5.1 requires a newer Hub API than Transformers 4.57 supports.
+# Use the historical compatible Datasets version, then run `uv pip check`.
+transformers==4.57.6
+peft==0.21.2
+datasets==5.0.1
+accelerate==1.15.0
+huggingface_hub==0.36.2
+sacrebleu==2.6.0

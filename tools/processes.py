@@ -38,9 +38,12 @@ def run_foreground(command: Sequence[str], *, cwd: Path, env: Mapping[str, str])
 
 def run_logged(command: Sequence[str], *, cwd: Path, env: Mapping[str, str], log_path: Path) -> int:
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    # Windows exclusive text open can follow a dangling symlink to a new target.
+    if log_path.is_symlink():
+        raise FileExistsError(f"Log path is an existing link: {log_path}; choose a fresh --log-file")
     # Open the log before starting a possibly paid job. A logging failure must
     # not leave an unobserved child process running.
-    with log_path.open("w", encoding="utf-8") as log:
+    with log_path.open("x", encoding="utf-8") as log:
         child = subprocess.Popen(list(command), cwd=cwd, env=dict(env), stdout=subprocess.PIPE,
                                  stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                                  errors="replace", bufsize=1)

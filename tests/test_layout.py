@@ -26,6 +26,7 @@ JOBS = [
     "reporting/build_board.py", "reporting/plot_board.py",
     "run_eval.py", "run_train.py", "serve.py", "cloud/vast/run.py",
     "cloud/vast/lifecycle.py", "cloud/vast/upload.py", "cloud/vast/provision.py",
+    "evaluation/eval_task_eos.py", "cloud/vast/task_eos_experiment.py", "cloud/vast/task_eos_artifacts.py",
 ])
 def test_script_help_from_another_directory(script, tmp_path):
     result = subprocess.run([sys.executable, str(ROOT / script), "--help"],
@@ -86,6 +87,7 @@ for name, attributes in {
     for attribute in attributes:
         setattr(module, attribute, None)
     sys.modules[name] = module
+sys.modules["transformers"].TrainerCallback = type("TrainerCallback", (), {})
 from cloud.modal import artifacts, processes
 for script in sys.argv[2:]:
     assert callable(runpy.run_path(str(root / script))["main"])
@@ -207,7 +209,7 @@ def modal_runtime(modal_job, monkeypatch, tmp_path):
             out, err, rc = train(command)
             return SimpleNamespace(stdout=out, stderr=err, returncode=rc)
         scope["subprocess"] = SimpleNamespace(run=buffered)
-        scope["pip_freeze"] = lambda: {}
+        scope["package_versions"] = lambda: {}
         args = {"box": ["test", "ro", 500, 20, 8, 2.0, "head"],
                 "task": ["test", "smoke", 500, 20, 8, 2.0],
                 "monolith": ["test", 500, 20, 8, 2.0],
@@ -223,6 +225,11 @@ def test_modal_request_reuse_and_rejection_are_read_only(job, trainer, remote, m
     runtime = modal_runtime(job)
     manifest = runtime.entry(*runtime.args)
     command = runtime.calls[0]
+    if job == "task":
+        bindings = [command[index + 1] for index, value in enumerate(command) if value == "--box"]
+        assert bindings == [
+            f"{lang}=/vault/adapters/qwen06b/box-{lang}/qwen06b-box-{lang}-smoke-001"
+            for lang in ("ro", "en", "fr", "de")]
     output = Path(command[command.index("--output") + 1])
     before = {p.name: p.read_bytes() for p in output.iterdir()}
     calls = len(runtime.calls)

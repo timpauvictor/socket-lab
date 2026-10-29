@@ -27,7 +27,7 @@ import modal
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 from cloud.modal.artifacts import check_run_request, request_identity, file_manifest, retrieve_files, write_manifest
-from cloud.modal.processes import pip_freeze, run_streaming
+from cloud.modal.processes import package_versions, run_streaming
 
 TRAIN_SCRIPT = REPO_ROOT / "training" / "train_task.py"
 
@@ -57,6 +57,7 @@ train_image = (
     .add_local_file(str(Path(__file__).resolve()), "/root/job_definition.py")
     .add_local_file(str(TRAIN_SCRIPT), "/root/job_train_task.py")
     .add_local_file(str(REPO_ROOT / "training/translation_data.py"), "/root/translation_data.py")
+    .add_local_file(str(REPO_ROOT / "training/task_model.py"), "/root/task_model.py")
     .add_local_file(str(REPO_ROOT / "cloud/modal/artifacts.py"), "/root/cloud/modal/artifacts.py")
     .add_local_file(str(REPO_ROOT / "cloud/modal/processes.py"), "/root/cloud/modal/processes.py")
 )
@@ -100,10 +101,10 @@ def train_run(run_id: str, phase: str, max_pairs: int, max_steps: int,
         sys.executable, "/root/job_train_task.py",
         "--model", BASE_MODEL,
         "--output", str(out_dir),
-        "--box_ro", f"/vault{_box_dir('ro', phase)}",
-        "--box_en", f"/vault{_box_dir('en', phase)}",
-        "--box_fr", f"/vault{_box_dir('fr', phase)}",
-        "--box_de", f"/vault{_box_dir('de', phase)}",
+    ]
+    for language in LANGS:
+        command += ["--box", f"{language}=/vault{_box_dir(language, phase)}"]
+    command += [
         "--pairs", PAIRS,
         "--max_pairs", str(max_pairs),
         "--max_steps", str(max_steps),
@@ -112,7 +113,7 @@ def train_run(run_id: str, phase: str, max_pairs: int, max_steps: int,
     ]
     inputs = [f"/vault{_box_dir(lang, phase)}/{name}" for lang in LANGS
               for name in ("adapter_config.json", "adapter_model.safetensors")]
-    request = request_identity(command, sources=["/root/translation_data.py", "/root/job_definition.py"], inputs=inputs)
+    request = request_identity(command, sources=["/root/translation_data.py", "/root/task_model.py", "/root/job_definition.py"], inputs=inputs)
     existing = check_run_request(out_dir, run_id, request)
     if existing is not None:
         return existing
@@ -172,7 +173,7 @@ def train_run(run_id: str, phase: str, max_pairs: int, max_steps: int,
         "epochs": epochs,
         "rank": rank,
         "files": files,
-        "versions": pip_freeze(),
+        "versions": package_versions(),
         "completed_at_utc": datetime.now(timezone.utc).isoformat(),
     }
     write_manifest(marker, result)

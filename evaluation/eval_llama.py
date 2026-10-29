@@ -24,12 +24,15 @@ import hashlib
 import json
 import math
 import sys
-import urllib.error
-import urllib.request
+from urllib.parse import urljoin
+from typing import Literal, TextIO
 from collections.abc import Iterator
 from pathlib import Path
 
-from prompts import translation_prompt
+if __package__:
+    from .prompts import translation_prompt
+else:
+    from prompts import translation_prompt
 
 LANG_NAMES = {"ro": "Romanian", "en": "English", "fr": "French", "de": "German", "fi": "Finnish"}
 # FLORES+ uses ISO 639-3 codes on the Hub
@@ -48,26 +51,39 @@ def first_line(text: str) -> str:
     return text.split("\n", 1)[0].strip()
 
 
-def request_text(url: str, payload: dict[str, object] | None, timeout_seconds: float) -> tuple[int, str]:
-    data = None
-    headers = {}
-    if payload is not None:
-        data = json.dumps(payload).encode("utf-8")
-        headers["Content-Type"] = "application/json"
-    request = urllib.request.Request(
-        url,
-        data=data,
-        headers=headers,
-        method="POST" if data is not None else "GET",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
-            return response.status, response.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:500]
-        raise RuntimeError(f"HTTP request failed: {url} status {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"HTTP request failed: {url}: {exc.reason}") from exc
+def request_text(url: str, payload: dict[str, object] | None, timeout_seconds: float,
+                 *, decode_errors: Literal["strict", "replace"] = "replace") -> tuple[int, str]:
+    # Keep HTTP optional: saved-record scoring does not need Requests installed.
+    import requests
+
+    visited = {}
+    while True:
+        method = "GET" if payload is None else "POST"
+        try:
+            with requests.request(method, url, json=payload, timeout=timeout_seconds,
+                                  allow_redirects=False) as response:
+                status = response.status_code
+                # Error/redirect bodies are diagnostics; only success needs strict decoding.
+                body = response.content.decode("utf-8", errors=decode_errors if status < 300 else "replace")
+                location = response.headers.get("Location") or response.headers.get("URI")
+        except requests.RequestException as exc:
+            raise RuntimeError(f"HTTP request failed: {url}: {exc}") from exc
+
+        # Preserve urllib's redirects: 301/302/303 can turn POST into GET;
+        # 307/308 must not replay a completion POST. These are not retries.
+        if status in (301, 302, 303, 307, 308) and location:
+            if method == "POST" and status in (307, 308):
+                raise RuntimeError(f"HTTP request failed: {url} status {status}: {body[:500]}")
+            target = urljoin(url, location)
+            if visited.get(target, 0) >= 4 or len(visited) >= 10:
+                raise RuntimeError(f"HTTP redirect limit reached: {url}")
+            visited[target] = visited.get(target, 0) + 1
+            url = target
+            payload = None
+            continue
+        if status >= 300:
+            raise RuntimeError(f"HTTP request failed: {url} status {status}: {body[:500]}")
+        return status, body
 
 
 def check_server(base_url: str, model: str, timeout_seconds: float) -> None:
@@ -168,15 +184,15 @@ def build_meta(args: argparse.Namespace) -> dict[str, object]:
         "split": args.split,
         "model": args.model,
         "prompt_version": PROMPT_VERSION,
-        "strategy": getattr(args, "strategy", "direct"),
-        "pivot": getattr(args, "pivot", None),
+        "strategy": args.strategy,
+        "pivot": args.pivot,
         "max_new_tokens": args.max_new_tokens,
         "temperature": 0,
-        "stop": [] if getattr(args, "strategy", "direct") == "scratchpad" else ["\n"],
+        "stop": [] if args.strategy == "scratchpad" else ["\n"],
         "run_id": args.run_id,
         "pairs_sha256": None,
     }
-    if getattr(args, "pairs", None):
+    if args.pairs:
         meta["pairs_sha256"] = hashlib.sha256(Path(args.pairs).read_bytes()).hexdigest()
     return meta
 
@@ -192,11 +208,14 @@ def read_meta(path: Path) -> dict[str, object]:
     return header
 
 
-def open_records(path: Path, meta: dict[str, object], overwrite: bool) -> tuple[object, set[str]]:
+def open_records(path: Path, meta: dict[str, object], overwrite: bool, *,
+                 expected_pairs: list[tuple[str, str, str]] | None = None,
+                 fields: tuple[str, ...] = ("id", "src", "hyp", "ref")) -> tuple[TextIO, set[str]]:
     """Open the records file for appending; return (stream, completed ids).
 
-    Check saved rows, keeping only their IDs in memory. Reject settings that
-    don't match, rather than mixing different runs.
+    Check the required fields before adding rows. For local pair files, also
+    match each saved ID, source and reference to the inputs. Streamed runs
+    still check the saved settings and IDs.
     """
     if path.exists() and not overwrite:
         stored = read_meta(path)
@@ -206,7 +225,9 @@ def open_records(path: Path, meta: dict[str, object], overwrite: bool) -> tuple[
                     f"Records file {path} was made for {key}={stored.get(key)!r}, "
                     f"not {value!r}; use a fresh --output (legacy records remain scoreable)"
                 )
-        completed = {record["id"] for record in iter_records(path)}
+        completed = set()
+        for record in iter_records(path, fields=fields, expected_pairs=expected_pairs):
+            completed.add(record["id"])
         with path.open("rb") as raw:
             raw.seek(-1, 2)
             if raw.read(1) != b"\n":
@@ -221,13 +242,19 @@ def open_records(path: Path, meta: dict[str, object], overwrite: bool) -> tuple[
     return stream, set()
 
 
-def append_record(stream: object, record: dict[str, object]) -> None:
-    stream.write(json.dumps(record, ensure_ascii=False) + "\n")  # type: ignore[union-attr]
-    stream.flush()  # type: ignore[union-attr]
+def append_record(stream: TextIO, record: dict[str, object]) -> None:
+    stream.write(json.dumps(record, ensure_ascii=False) + "\n")
+    stream.flush()
 
 
-def iter_records(path: Path, fields: tuple[str, ...] = ("id", "src", "hyp", "ref")) -> Iterator[dict]:
-    """Read records without repairing corruption or counting duplicate IDs."""
+def iter_records(path: Path, fields: tuple[str, ...] = ("id", "src", "hyp", "ref"), *,
+                 expected_pairs: list[tuple[str, str, str]] | None = None) -> Iterator[dict]:
+    """Read saved rows; reject broken data, repeated IDs or mismatched input pairs."""
+    expected = None
+    if expected_pairs is not None:
+        expected = {}
+        for row_id, source, reference in expected_pairs:
+            expected[row_id] = (source, reference)
     seen: set[str] = set()
     with path.open("r", encoding="utf-8") as stream:
         for line_number, line in enumerate(stream, 1):
@@ -244,6 +271,8 @@ def iter_records(path: Path, fields: tuple[str, ...] = ("id", "src", "hyp", "ref
             row_id = record["id"]
             if not row_id or row_id in seen:
                 raise RuntimeError(f"Empty or duplicate id {row_id!r} at {path}:{line_number}")
+            if expected is not None and expected.get(row_id) != (record.get("src"), record.get("ref")):
+                raise RuntimeError(f"Evaluation resume input identity mismatch for id {row_id!r}: {path}")
             seen.add(row_id)
             yield record
 
@@ -253,13 +282,14 @@ def iter_pairs(path: Path) -> Iterator[tuple[str, str, str]]:
         yield record["id"], record["src"], record["ref"]
 
 
-def load_pairs(args: argparse.Namespace) -> list[tuple[str, str, str]]:
-    path = Path(args.pairs)
+def load_pairs(path: Path, *, src: str, tgt: str, split: str) -> list[tuple[str, str, str]]:
+    path = Path(path)
+    requested = {"src": src, "tgt": tgt, "split": split}
     with path.open(encoding="utf-8") as stream:
         first = json.loads(stream.readline())
     if isinstance(first, dict) and first.get("_meta") is True:
         for key in ("src", "tgt", "split"):
-            if first.get(key) != getattr(args, key):
+            if first.get(key) != requested[key]:
                 raise RuntimeError(f"Pair file {path}: {key} does not match the requested evaluation")
     pairs = list(iter_pairs(path))
     if not pairs:
@@ -319,6 +349,7 @@ def post_completion(base_url: str, model: str, prompt: str, max_tokens: int, tim
 
 def main() -> int:
     ap = argparse.ArgumentParser()
+    ap.set_defaults(strategy="direct", pivot=None, pairs=None)
     ap.add_argument("--base_url", default="http://localhost:8081")
     ap.add_argument("--model", help="Model alias served by llama.cpp; not needed for --score_only")
     ap.add_argument("--run_id", default="", help="Stable identity of weights, adapters and backend; required for inference")

@@ -7,5 +7,6 @@ transformers>=4.57
 peft
 datasets
 sacrebleu==2.6.0
+requests==2.34.2
 accelerate
 huggingface_hub

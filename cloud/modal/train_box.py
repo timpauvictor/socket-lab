@@ -24,7 +24,7 @@ import modal
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 from cloud.modal.artifacts import check_run_request, request_identity, file_manifest, retrieve_files, write_manifest
-from cloud.modal.processes import pip_freeze, run_streaming
+from cloud.modal.processes import package_versions, run_streaming
 
 TRAIN_SCRIPT = REPO_ROOT / "training" / "train_box.py"
 
@@ -134,7 +134,7 @@ def train_run(run_id: str, lang: str, max_chunks: int, max_steps: int,
         "scan_mult": scan_mult,
         "final_loss": final_loss,
         "files": files,
-        "versions": pip_freeze(),
+        "versions": package_versions(),
         "completed_at_utc": datetime.now(timezone.utc).isoformat(),
     }
     write_manifest(marker, result)

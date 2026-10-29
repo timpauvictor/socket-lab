@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import os
 import sys
 from pathlib import Path
@@ -21,9 +22,11 @@ def test_eval_score_only_command_and_inference_dependencies(tmp_path, monkeypatc
     score = run_eval.build_parser().parse_args(["--repo-root", str(tmp_path), "--score-only", "--output", "out file"])
     cmd = run_eval.command_for(score)
     assert cmd[:7] == ["uv path", "run", "--no-project", "--with", "sacrebleu==2.6.0", "--", "python"]
-    assert "datasets" not in cmd and "--score_only" in cmd and "out file" in cmd
+    assert "datasets" not in cmd and "requests==2.34.2" not in cmd
+    assert "--score_only" in cmd and "out file" in cmd
     infer = run_eval.build_parser().parse_args(["--repo-root", str(tmp_path), "--run-id", "r"])
     assert "datasets" in run_eval.command_for(infer)
+    assert "requests==2.34.2" in run_eval.command_for(infer)
     assert run_eval.command_for(infer)[-6:] == ["--src", "ro", "--tgt", "en", "--run_id", "r"]
 
 
@@ -73,6 +76,52 @@ def test_logged_helper_streams_utf8_and_preserves_exit(tmp_path):
         [sys.executable, "-c", code], cwd=tmp_path, env=env, log_path=log)
     assert result == 17
     assert "héllo" in log.read_text(encoding="utf-8") and "diagnostic" in log.read_text(encoding="utf-8")
+
+
+def test_training_log_admission_and_explicit_fresh_path(monkeypatch, tmp_path):
+    from tools import processes
+    calls = []
+    class Child:
+        def __init__(self): self.stdout = io.StringIO("new invocation\n")
+        def wait(self): return 17
+        def poll(self): return 17
+    def spawn(*args, **kwargs):
+        calls.append(args)
+        return Child()
+    monkeypatch.setattr(processes.subprocess, "Popen", spawn)
+    monkeypatch.setattr(run_train, "resolve_executable", lambda _: "stub-modal")
+    args = ["--job", "task", "--phase", "smoke", "--repo-root", str(tmp_path)]
+    default = tmp_path / "logs/train-task-smoke-console.log"
+    default.parent.mkdir()
+    default.write_bytes(b"banked")
+    assert run_train.main(args) == 1
+    assert default.read_bytes() == b"banked" and not calls
+    for selected in [Path("fresh/relative.log"), tmp_path / "absolute.log"]:
+        assert run_train.main([*args, "--log-file", str(selected)]) == 17
+        assert (tmp_path / selected).read_text(encoding="utf-8") == "new invocation\n"
+    assert len(calls) == 2 and default.read_bytes() == b"banked"
+    dry = tmp_path / "dry/new.log"
+    assert run_train.main([*args, "--log-file", str(dry), "--dry-run"]) == 0
+    assert not dry.parent.exists() and len(calls) == 2
+
+    # A file arriving just before open must not be truncated either.
+    racing = tmp_path / "racing.log"
+    original_open = Path.open
+    def race(path, mode="r", *a, **kw):
+        if path == racing:
+            with original_open(path, "wb") as stream:
+                stream.write(b"arrived first")
+        return original_open(path, mode, *a, **kw)
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "open", race)
+        assert run_train.main([*args, "--log-file", str(racing)]) == 1
+    assert racing.read_bytes() == b"arrived first" and len(calls) == 2
+    for name, target in [("linked.log", default), ("dangling.log", tmp_path / "absent")]:
+        link = tmp_path / name
+        link.symlink_to(target)
+        assert run_train.main([*args, "--log-file", str(link)]) == 1
+        assert link.is_symlink() and len(calls) == 2
+    assert default.read_bytes() == b"banked" and not (tmp_path / "absent").exists()
 
 
 def test_foreground_launchers_preserve_environment_and_exit(monkeypatch, tmp_path):

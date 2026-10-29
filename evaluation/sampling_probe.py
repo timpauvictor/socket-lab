@@ -9,12 +9,16 @@ not hypotheses, and cause a nonzero exit status.
 """
 import argparse
 import json
-from http.client import HTTPException
 import sys
-import urllib.request
 
-from prompts import PROBE_PROMPTS as PROMPTS, translation_prompt
-from repetition import has_loop
+if __package__:
+    from .eval_llama import request_text
+    from .prompts import PROBE_PROMPTS as PROMPTS, translation_prompt
+    from .repetition import has_loop
+else:
+    from eval_llama import request_text
+    from prompts import PROBE_PROMPTS as PROMPTS, translation_prompt
+    from repetition import has_loop
 
 CONDITIONS = [
     ("greedy+penalty", 0.0, 1.1),
@@ -23,19 +27,16 @@ CONDITIONS = [
 
 
 def complete(base_url: str, prompt: str, temperature: float, repeat_penalty: float) -> str:
-    body = json.dumps({
+    payload = {
         "prompt": prompt,
         "temperature": temperature,
         "repeat_penalty": repeat_penalty,
         "n_predict": 128,
         "stop": ["\n"],
         "stream": False,
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        base_url.rstrip("/") + "/completion", data=body,
-        headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(req, timeout=300) as r:
-        response = json.loads(r.read().decode("utf-8"))
+    }
+    _, body = request_text(base_url.rstrip("/") + "/completion", payload, 300, decode_errors="strict")
+    response = json.loads(body)
     if not isinstance(response, dict) or not isinstance(response.get("content"), str):
         raise ValueError("Completion response must contain string content")
     return response["content"]
@@ -63,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
                           "tgt_lang": t, "prompt": prompt}
                 try:
                     out = complete(args.base_url, prompt, temp, pen)
-                except (OSError, ValueError, HTTPException) as exc:
+                except (OSError, ValueError, RuntimeError) as exc:
                     n_failed += 1
                     record["error"] = {"type": type(exc).__name__, "message": str(exc)}
                     print(f"prompt {i} {cond} ({s}->{t}): request failed ({type(exc).__name__})")

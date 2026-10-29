@@ -17,38 +17,54 @@ class Job:
     keep_running: bool = False
 
 
-# These are existing named experiments, not provider plugins or new algorithms.
+@dataclass(frozen=True)
+class Recipe:
+    script: str
+    output_name: str
+    log_name: str
+    repo: str
+    max_pairs: int
+    rank: int
+    compile_model: bool
+
+
+# Existing experiments: named fields make the settings visible at each definition.
 RECIPES = {
-    "monolith": ("train_lora.py", "monolith-full-001", "monolith.log",
-                 "bespoke-qwen06b-monolith-full-001", 150000, 32, True),
-    "task": ("train_task.py", "task-full-001", "task.log",
-             "bespoke-qwen06b-task-full-001", 150000, 32, True),
-    "eos-tune": ("train_lora.py", "eos-tune-001", "eos-tune.log",
-                 "bespoke-qwen06b-monolith-eos-001", 150000, 32, False),
-    "task-smoke": ("train_task.py", "task-smoke-001", "smoke-task.log",
-                   "bespoke-qwen06b-smoke-test", 500, 8, True),
+    "monolith": Recipe(script="train_lora.py", output_name="monolith-full-001",
+                       log_name="monolith.log", repo="bespoke-qwen06b-monolith-full-001",
+                       max_pairs=150000, rank=32, compile_model=True),
+    "task": Recipe(script="train_task.py", output_name="task-full-001",
+                   log_name="task.log", repo="bespoke-qwen06b-task-full-001",
+                   max_pairs=150000, rank=32, compile_model=True),
+    "eos-tune": Recipe(script="train_lora.py", output_name="eos-tune-001",
+                       log_name="eos-tune.log", repo="bespoke-qwen06b-monolith-eos-001",
+                       max_pairs=150000, rank=32, compile_model=False),
+    "task-smoke": Recipe(script="train_task.py", output_name="task-smoke-001",
+                         log_name="smoke-task.log", repo="bespoke-qwen06b-smoke-test",
+                         max_pairs=500, rank=8, compile_model=True),
 }
 
 
 def job_spec(name: str, workspace: Path, python: str, *, compile_model: bool | None = None,
              resume_from: str | None = None, resume_pair: str | None = None) -> Job:
-    script, output_name, log_name, repo, max_pairs, rank, default_compile = RECIPES[name]
-    output = workspace / output_name
-    command = [python, str(workspace / "scripts" / script), "--model", BASE_MODEL,
+    recipe = RECIPES[name]
+    output = workspace / recipe.output_name
+    command = [python, str(workspace / "scripts" / recipe.script), "--model", BASE_MODEL,
                "--output", str(output)]
-    if script == "train_task.py":
+    if recipe.script == "train_task.py":
         for lang in LANGUAGES:
-            command += [f"--box_{lang}", str(workspace / "boxes" / f"box-{lang}")]
-    command += ["--pairs", "ro-en,fr-en,de-en", "--max_pairs", str(max_pairs)]
+            box_path = workspace / "boxes" / f"box-{lang}"
+            command += ["--box", f"{lang}={box_path}"]
+    command += ["--pairs", "ro-en,fr-en,de-en", "--max_pairs", str(recipe.max_pairs)]
     if name != "task-smoke":
         command += ["--epochs", "2.0"]
     if name == "task-smoke":
         command += ["--max_steps", "20"]
-    command += ["--rank", str(rank)]
+    command += ["--rank", str(recipe.rank)]
     if name == "eos-tune":
         command += ["--lr", "5e-5", "--max_steps", "1000", "--eos_stop",
                     "--tune_from", str(workspace / "tune-src")]
-    compile_enabled = default_compile if compile_model is None else compile_model
+    compile_enabled = recipe.compile_model if compile_model is None else compile_model
     if compile_enabled:
         command += ["--compile"]
     if name == "monolith":
@@ -61,8 +77,8 @@ def job_spec(name: str, workspace: Path, python: str, *, compile_model: bool | N
         if name != "task" or not resume_from:
             raise ValueError("--resume-pair requires a task checkpoint")
         command += ["--resume_pair", resume_pair]
-    return Job(name, command, output, workspace / "logs" / log_name, f"vick1211/{repo}",
-               "Task adapter complete:" if script == "train_task.py" else "Saved LoRA to ",
+    return Job(name, command, output, workspace / "logs" / recipe.log_name, f"vick1211/{recipe.repo}",
+               "Task adapter complete:" if recipe.script == "train_task.py" else "Saved LoRA to ",
                keep_running=name == "task-smoke")
 
 

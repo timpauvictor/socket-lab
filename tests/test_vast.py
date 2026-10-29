@@ -171,7 +171,9 @@ def test_recipes_keep_historical_arguments_and_resume_rules(tmp_path):
     mono = recipes.job_spec("monolith", tmp_path, "python")
     eos = recipes.job_spec("eos-tune", tmp_path, "python")
     smoke = recipes.job_spec("task-smoke", tmp_path, "python")
-    assert "--box_ro" in task.command and "--epochs" in task.command and "--compile" in task.command
+    bindings = [task.command[index + 1] for index, value in enumerate(task.command) if value == "--box"]
+    assert bindings == [f"{lang}={tmp_path / 'boxes' / ('box-' + lang)}" for lang in ("ro", "en", "fr", "de")]
+    assert "--epochs" in task.command and "--compile" in task.command
     assert "--resume_from" in mono.command and "--compile" in mono.command
     assert "--eos_stop" in eos.command and "--tune_from" in eos.command and "--compile" not in eos.command
     assert "--max_steps" in smoke.command and smoke.keep_running

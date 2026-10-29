@@ -2,18 +2,18 @@
 from __future__ import annotations
 
 import subprocess
-import sys
 import threading
+from importlib.metadata import PackageNotFoundError, version
 
 
-def pip_freeze() -> dict[str, str]:
-    out = subprocess.run([sys.executable, "-m", "pip", "freeze"], capture_output=True, text=True, check=True)
-    frozen = {}
-    for line in out.stdout.splitlines():
-        if "==" in line:
-            name, version = line.split("==", 1)
-            frozen[name.strip()] = version.strip()
-    return {key: frozen[key] for key in ("torch", "transformers", "peft", "datasets", "accelerate") if key in frozen}
+def package_versions() -> dict[str, str]:
+    versions = {}
+    for name in ("torch", "transformers", "peft", "datasets", "accelerate"):
+        try:
+            versions[name] = version(name)
+        except PackageNotFoundError:
+            continue
+    return versions
 
 
 def run_streaming(command: list[str]) -> tuple[str, str, int]:

@@ -17,7 +17,7 @@ def upload_commands(repo: Path, host: str, port: int, checkpoint: Path) -> tuple
     address = f"[{host}]" if ":" in host else host
     remote = f"root@{address}"
     training = [repo / "training" / name for name in
-                ("train_lora.py", "train_box.py", "train_task.py", "translation_data.py")]
+                ("train_lora.py", "train_box.py", "train_task.py", "translation_data.py", "task_model.py")]
     operations = [repo / "cloud/vast" / name for name in
                   ("run.py", "recipes.py", "lifecycle.py", "provision.py")]
     directories = ["/workspace/bh/scripts", "/workspace/bh/logs"]

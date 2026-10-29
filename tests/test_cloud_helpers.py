@@ -1,6 +1,7 @@
 """Local tests for shared Modal artifact and process helpers."""
 import hashlib
 import json
+import os
 import sys
 
 import pytest
@@ -48,7 +49,12 @@ def test_retrieval_chunks_skip_conflict_and_mismatch(tmp_path):
         retrieve_files(bad, fresh, read_file, ["model"], remote_path="/chosen")
     assert calls[-1] == "/chosen/model"
     assert not (fresh / "model").exists()
-    assert (fresh / "model.part").read_bytes() == data
+    partial, = fresh.glob(".model.*.part")
+    assert partial.read_bytes() == data
+    retrieve_files(manifest, fresh, read_file, ["model"])
+    assert (fresh / "model").read_bytes() == data
+    assert partial.read_bytes() == data  # A retry preserves the failed transfer evidence.
+    assert list(fresh.glob(".model.*.part")) == [partial]
 
 
 def test_retrieval_rejects_conflicting_receipt_before_download(tmp_path):
@@ -70,15 +76,71 @@ def test_retrieval_rejects_conflicting_existing_file(tmp_path):
         retrieve_files(manifest, tmp_path, lambda _: pytest.fail("download should be skipped"), ["model"])
 
 
-def test_environment_capture_keeps_only_recorded_packages(monkeypatch):
-    from types import SimpleNamespace
+@pytest.mark.parametrize("name", ["../escape", "/absolute", "C:stream", "a/b", "a\\b", "..", "NUL.bin", "COM1", "file.", "_COMPLETE.json", "_complete.json"])
+def test_retrieval_admits_all_names_before_transferring(tmp_path, name):
+    entry = {"name": "first", "sha256": hashlib.sha256(b"good").hexdigest(), "bytes": 4}
+    manifest = {"volume_path": "/remote", "files": [entry, dict(entry, name=name)]}
+    with pytest.raises(RuntimeError, match="Unsafe artifact"):
+        retrieve_files(manifest, tmp_path, lambda _: pytest.fail("read before admission"), ["first", name])
+    assert not list(tmp_path.iterdir())
 
-    def freeze(command, **kwargs):
-        assert command == [sys.executable, "-m", "pip", "freeze"]
-        assert kwargs == {"capture_output": True, "text": True, "check": True}
-        return SimpleNamespace(stdout="torch==2.12.0+cpu\npeft==0.21.2\nother==1\neditable @ file:///ignored\n")
-    monkeypatch.setattr(processes.subprocess, "run", freeze)
-    assert processes.pip_freeze() == {"torch": "2.12.0+cpu", "peft": "0.21.2"}
+
+@pytest.mark.parametrize("extra,changes,selected", [
+    ("second", {"sha256": "invalid"}, "second"), ("second", {"bytes": True}, "second"),
+    ("second", {"bytes": -1}, "second"), ("model", {}, "model"),
+    ("MODEL", {}, "MODEL"), ("second", {}, "missing")])
+def test_retrieval_rejects_invalid_or_ambiguous_manifest(tmp_path, extra, changes, selected):
+    entry = {"name": "model", "sha256": hashlib.sha256(b"good").hexdigest(), "bytes": 4}
+    manifest = {"volume_path": "/remote", "files": [entry, dict(entry, name=extra, **changes)]}
+    with pytest.raises(RuntimeError, match="Invalid or duplicate|missing from manifest"):
+        retrieve_files(manifest, tmp_path, lambda _: pytest.fail("read before admission"), ["model", selected])
+    assert not list(tmp_path.iterdir())
+
+
+def test_retrieval_preserves_linked_partial_and_rejects_destination_link(tmp_path):
+    data = b"good"
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"banked")
+    local = tmp_path / "local"
+    local.mkdir()
+    os.link(outside, local / "model.part")
+    entry = {"name": "model", "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+    manifest = {"volume_path": "/remote", "files": [entry]}
+    retrieve_files(manifest, local, lambda _: [data], ["model"])
+    assert (local / "model").read_bytes() == data
+    assert outside.read_bytes() == (local / "model.part").read_bytes() == b"banked"
+    linked = tmp_path / "linked"
+    linked.mkdir()
+    try:
+        (linked / "model").symlink_to(outside)
+    except OSError as exc:
+        pytest.skip(f"Host cannot create symlinks: {exc}")
+    with pytest.raises(RuntimeError, match="Unsafe local artifact"):
+        retrieve_files(manifest, linked, lambda _: pytest.fail("download through link"), ["model"])
+    assert outside.read_bytes() == b"banked" and (linked / "model").is_symlink()
+
+
+def test_environment_capture_keeps_only_recorded_packages(monkeypatch):
+    installed = {"torch": "2.12.0+cpu", "peft": "0.21.2", "other": "1"}
+    queried = []
+
+    def version(name):
+        queried.append(name)
+        if name not in installed:
+            raise processes.PackageNotFoundError(name)
+        return installed[name]
+
+    monkeypatch.setattr(processes, "version", version)
+    monkeypatch.setattr(processes.subprocess, "run", lambda *a, **k: pytest.fail("spawned pip"))
+    assert processes.package_versions() == {"torch": "2.12.0+cpu", "peft": "0.21.2"}
+    assert queried == ["torch", "transformers", "peft", "datasets", "accelerate"]
+
+    def corrupt_metadata(name):
+        raise RuntimeError("unreadable metadata")
+
+    monkeypatch.setattr(processes, "version", corrupt_metadata)
+    with pytest.raises(RuntimeError, match="unreadable metadata"):
+        processes.package_versions()
 
 
 def test_streaming_output_and_exit_status():

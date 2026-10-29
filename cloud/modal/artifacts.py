@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import tempfile
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
@@ -77,30 +79,75 @@ def check_run_request(out_dir: Path, run_id: str, request: dict) -> dict | None:
 def retrieve_files(manifest: dict, local_dir: Path,
                    read_file: Callable[[str], Iterable[bytes]], names: Iterable[str],
                    *, remote_path: str | None = None) -> None:
-    """Verify selected files before replacement; caller publishes completion last."""
-    marker = local_dir / "_COMPLETE.json"
+    """Download files with simple filenames; save the completion record last.
+
+    Check names and destinations before downloading. Use one writer for each
+    directory. These checks cannot protect against another process replacing
+    the directory at the same time.
+    """
+    root = local_dir.resolve(strict=True)
+    by_name = {}
+    seen_names = set()
+    for entry in manifest["files"]:
+        if not isinstance(entry, dict):
+            raise RuntimeError("Invalid artifact manifest entry")
+        name = _artifact_name(entry.get("name"))
+        if (name.lower() in seen_names or not isinstance(entry.get("sha256"), str)
+                or re.fullmatch(r"[0-9a-f]{64}", entry["sha256"]) is None
+                or type(entry.get("bytes")) is not int or entry["bytes"] < 0):
+            raise RuntimeError(f"Invalid or duplicate artifact manifest entry: {name}")
+        by_name[name] = entry
+        seen_names.add(name.lower())
+    selected = [_artifact_name(name) for name in names]
+    if any(name not in by_name for name in selected):
+        raise RuntimeError("Selected artifact missing from manifest")
+    marker = root / "_COMPLETE.json"
+    if marker.is_symlink():
+        raise RuntimeError(f"Unsafe local manifest link: {marker}")
     if marker.exists():
         _require_matching_manifest(marker, manifest)
-    by_name = {entry["name"]: entry for entry in manifest["files"]}
-    for name in names:
+    pending = []
+    for name in selected:
+        local_file = root / name
+        if local_file.is_symlink() or not local_file.resolve().is_relative_to(root):
+            raise RuntimeError(f"Unsafe local artifact path: {local_file}")
         entry = by_name[name]
-        local_file = local_dir / name
         if local_file.exists():
-            if hash_file(local_file) != (entry["sha256"], entry["bytes"]):
+            if not local_file.is_file() or hash_file(local_file) != (entry["sha256"], entry["bytes"]):
                 raise RuntimeError(f"Conflicting local file exists: {local_file}")
             print(f"Existing local file verified, no download: {name}", flush=True)
-            continue
-        partial = local_dir / (name + ".part")
+        else:
+            pending.append(name)
+    for name in pending:
+        entry = by_name[name]
+        local_file = root / name
         digest = hashlib.sha256()
         size = 0
         directory = manifest["volume_path"] if remote_path is None else remote_path
         remote = f"{directory}/{name}"
-        with partial.open("wb") as out:
-            for chunk in read_file(remote):
-                out.write(chunk)
-                digest.update(chunk)
-                size += len(chunk)
-        if (digest.hexdigest(), size) != (entry["sha256"], entry["bytes"]):
-            raise RuntimeError(f"Downloaded {name} differs from manifest")
-        partial.replace(local_file)
+        out = tempfile.NamedTemporaryFile(mode="wb", dir=root, prefix=f".{name}.", suffix=".part", delete=False)
+        partial = Path(out.name)
+        try:
+            with out:
+                for chunk in read_file(remote):
+                    out.write(chunk)
+                    digest.update(chunk)
+                    size += len(chunk)
+            if (digest.hexdigest(), size) != (entry["sha256"], entry["bytes"]):
+                raise RuntimeError(f"Downloaded {name} differs from manifest")
+            partial.replace(local_file)
+        finally:
+            if partial.exists():
+                print(f"Download partial retained for inspection: {partial}", flush=True)
         print(f"Downloaded and verified: {local_file}", flush=True)
+
+
+def _artifact_name(name: object) -> str:
+    # Portable flat names avoid traversal, Windows devices/streams and aliases.
+    reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
+                *(f"LPT{i}" for i in range(1, 10))}
+    if (not isinstance(name, str) or re.fullmatch(r"[A-Za-z0-9_.-]+", name) is None
+            or name.endswith(".") or name.split(".")[0].upper() in reserved
+            or name.lower() == "_complete.json"):
+        raise RuntimeError(f"Unsafe artifact filename: {name!r}")
+    return name

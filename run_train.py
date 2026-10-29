@@ -18,6 +18,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--lang", default="ro", choices=("ro", "en", "fr", "de", "all"))
     parser.add_argument("--modal-exe", default="modal")
     parser.add_argument("--repo-root", type=Path, default=ROOT)
+    parser.add_argument("--log-file", type=Path, help="Fresh console log; relative paths use --repo-root.")
     parser.add_argument("--dry-run", action="store_true")
     return parser
 
@@ -40,7 +41,7 @@ def command_for(args: argparse.Namespace) -> tuple[list[str], str]:
     command = [executable, "run", target]
     if args.job == "box" and args.lang != "all":
         command += ["--lang", args.lang]
-    return command, f"logs/{log_name}-console.log"
+    return command, str(args.log_file) if args.log_file is not None else f"logs/{log_name}-console.log"
 
 
 def main(argv: list[str] | None = None) -> int:
