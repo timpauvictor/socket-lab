@@ -6,7 +6,7 @@ I'm an amateur, not a researcher. I had an idea: could a language model work lik
 
 The existing model would be the socket. The cartridges would be **adapters**: extra trained weights used with the model, rather than replacements for the whole model.
 
-I tried a small translation experiment to explore this. This repository contains the scripts, scores, and notes. It is a record of the attempt, not proof that the cartridge idea works.
+I tried a small translation experiment to explore this. This repository contains the scripts, scores, and notes. It is a record of the attempt, not proof that the cartridge idea works. I used LLM assistance with the code, checks, and writing.
 
 ## What I tried
 
@@ -27,7 +27,27 @@ My honest takeaway: **I didn't get the separate cartridges working better, but I
 
 The translations were scored with **chrF**. It compares short sequences of characters in a generated translation with a reference translation. Higher scores mean more overlap. It is not a percentage of correct translations, and it cannot tell us by itself whether a translation gets the meaning right.
 
-Each comparison below used 1,012 examples from the FLORES translation test set.
+### Latest German–French check
+
+I later compared all three setups on the same machine, using the same 1,012 FLORES devtest examples for each run:
+
+| Setup | Direct German → French | German → English → French |
+|---|---:|---:|
+| Original model | 47.54 | 47.84 |
+| Single EOS-tuned adapter | 39.17 | 48.95 |
+| EOS-tuned cartridges | 26.41 | 47.46 |
+
+The cartridges did much worse directly and, even through English, didn't beat the original model's score. This didn't demonstrate the cartridge idea working, but it doesn't prove that every version of the idea must fail. I haven't established whether the small score differences are reliable.
+
+The task adapter used with the cartridges also received extra EOS training. Direct cartridges combined German and French; the two-step route combined German and English, then English and French. I chose that route manually; the model didn't learn to choose it.
+
+All six runs used the same RTX PRO 4000 Blackwell GPU, Q8 base model, and llama.cpp b11146/CUDA 12.8 runtime. Each request used temperature 0, a 128-token limit **per leg**, and a newline stop. These are translation scores, not measurements of EOS termination. The single-adapter runs had 28 empty direct outputs and 3 empty two-step outputs; they stayed in the scores. The other four runs had none.
+
+The [matched summary](results/german-french-matched-2026-10-28.json) has exact scores, settings, and file hashes. I'm keeping these six raw logs private because FLORES+ access terms restrict rehosting its text where web crawlers can pick it up. Hashes identify the saved files; they don't let readers independently recompute the scores.
+
+### Earlier results (historical)
+
+These older comparisons were not fully controlled and are separate from the matched check above. Each used 1,012 examples from the FLORES translation test set.
 
 | Translation direction | Original model's chrF | Model with the later adapter |
 |---|---:|---:|
@@ -41,7 +61,7 @@ German–French was another warning against a broad success claim. Direct transl
 
 Repeated text was much less common after the extra training. However, the runs do not separate the effect of the end-of-text marker from the effect of doing more training.
 
-The [full results table](results/eval-board.csv) includes unsuccessful attempts too. It has 18 rows; one is a short 10-example check, not a full comparison. Recalculating chrF from the saved translations reproduced all 18 recorded scores to two decimal places. That checks the scoring, not the whole experiment.
+The [historical results table](results/eval-board.csv) includes unsuccessful attempts too. It has 18 rows; one is a short 10-example check, not a full comparison. Recalculating chrF from the saved translations reproduced all 18 recorded scores to two decimal places. That checks the scoring, not the whole experiment.
 
 ## What this doesn't prove
 

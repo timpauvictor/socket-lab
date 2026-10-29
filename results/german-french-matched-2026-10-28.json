@@ -1,0 +1,138 @@
+{
+  "format": "matched-translation-scores-v1",
+  "evaluation_date": "2026-10-28",
+  "direction": "de-fr",
+  "metric": {
+    "name": "chrF",
+    "sacrebleu_version": "2.6.0",
+    "signature": "nrefs:1|case:mixed|eff:yes|nc:6|nw:0|space:no|version:2.6.0",
+    "note": "Character-overlap score, not accuracy, human semantic assessment or EOS termination rate."
+  },
+  "dataset": {
+    "id": "openlanguagedata/flores_plus",
+    "url": "https://huggingface.co/datasets/openlanguagedata/flores_plus",
+    "attribution": "FLORES+, Open Language Data Initiative",
+    "declared_license": "CC-BY-SA-4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "split": "devtest",
+    "examples_per_evaluation": 1012,
+    "frozen_pairs_sha256": "dbd83041b71a12083a20aa5282c7e47431ecb374e1e0e75517fdab61f50fc885",
+    "text_published": false,
+    "publication_note": "FLORES access rules restrict public copies that web crawlers can pick up. These replacement commits leave out FLORES pairs, raw translation logs and old probe outputs. I've kept the originals locally. Earlier public history had dataset text, and other copies may still exist. This summary has no dataset sentences or translations. Hashes alone aren't enough to recalculate the scores."
+  },
+  "runtime": {
+    "gpu": "NVIDIA RTX PRO 4000 Blackwell",
+    "same_host_for_all_six": true,
+    "backend": "CUDA",
+    "cuda_release": "12.8",
+    "llama_cpp_release": "b11146",
+    "llama_cpp_commit": "7fe450e19",
+    "llama_cpp_url": "https://github.com/ggml-org/llama.cpp/releases/tag/b11146",
+    "workers": 1,
+    "route_order_per_system": ["direct", "pivot"],
+    "fresh_servers_for_full_runs": true,
+    "temperature": 0,
+    "max_new_tokens_per_leg": 128,
+    "stop": ["\n"],
+    "prompt_version": 1,
+    "empty_outputs_filtered": false,
+    "reproducibility_note": "Cached greedy requests sometimes returned different text during startup checks. Those checks don't show that output is bit-for-bit repeatable or that overlapping requests caused the differences."
+  },
+  "model": {
+    "id": "Qwen/Qwen3-0.6B-Base",
+    "url": "https://huggingface.co/Qwen/Qwen3-0.6B-Base",
+    "attribution": "Qwen team",
+    "declared_license": "Apache-2.0",
+    "gguf_file_name": "qwen3-0.6b-base-q8_0.gguf",
+    "quantization": "Q8_0",
+    "sha256": "fd15a5badaf0d117d1d62832b8fba0009c79b7b52cf62fddd2867ecbf25ae5a9"
+  },
+  "adapters": [
+    {
+      "id": "eos-monolith",
+      "file_name": "eos-tune-lora.gguf",
+      "sha256": "366ee4d0e88a0885e4644cc6ccd361e42762de93685a43d1693733914fcdbb88"
+    },
+    {
+      "id": "task-eos-de-fr",
+      "file_name": "task-eos-de-fr.gguf",
+      "sha256": "c42b6e7632ce95b129ffce24439f3cb2bde912336fab4810fee4114ef5dca1f8"
+    },
+    {
+      "id": "task-eos-de-en",
+      "file_name": "task-eos-de-en.gguf",
+      "sha256": "dcd4eedcb1b2da9585a68a41520e5cf85e635e6b79ec798352203794032e2297"
+    },
+    {
+      "id": "task-eos-en-fr",
+      "file_name": "task-eos-en-fr.gguf",
+      "sha256": "f0b05dfd4c4c209954463ad6d4b89279acafeeaa1f30b16cbb17aa2e811e4b6c"
+    }
+  ],
+  "cartridge_composition": {
+    "direct_languages": ["de", "fr"],
+    "pivot_language_route": ["de", "en", "fr"],
+    "task_adapter_safetensors_sha256": "964a98637deec0faa53d212e7926d45d1c31f7b53b810211976ebc5813e609fa",
+    "task_adapter_eos_tuned": true,
+    "note": "Each leg uses one combined LoRA: the PEFT linear language-factor merge, including its cross terms, plus the same EOS-tuned task update. I chose the route through English; the model didn't learn to choose it. The adapter hashes identify the input files. No weights are published here."
+  },
+  "source_provenance": {
+    "recorded_staging_git_head": "844a2bea0f81f31dfe641cac3581771806520090",
+    "uncommitted_files_at_staging": ["evaluation/eval_pivot.py", "tests/test_evaluation.py"],
+    "tested_pivot_sha256": "a4dad948f4ba2ba9af94daa204b623b7cee4a590a695ad1dfa24d0a4020fa82a",
+    "tests_sha256": "22531680566408188b50f02a2d0fec9df870993af5bd9d031929b5dcba097e8f",
+    "evaluated_source_files": [
+      {"file_name": "serve.py", "sha256": "484a8e38febc32c1354406d08f434463ebc21028f497b66f74f88b3a99081ddf"},
+      {"file_name": "tools/processes.py", "sha256": "7ab02b1fc6ba3af43a6f6a04149894d4330ddea59c1633170769d843919a8453"},
+      {"file_name": "evaluation/eval_llama.py", "sha256": "88b5cb761f838b6bd8927181065c0d7376c34e25b5a3a3fa3aa88c71d9015057"},
+      {"file_name": "evaluation/eval_offline.py", "sha256": "c855a6e8ee68ba292ca1ae6dd91b130181c5a0af84921310031496aa1fa42b65"},
+      {"file_name": "evaluation/eval_pivot.py", "sha256": "a4dad948f4ba2ba9af94daa204b623b7cee4a590a695ad1dfa24d0a4020fa82a"},
+      {"file_name": "evaluation/prompts.py", "sha256": "2b7edea2a68698207ba396c7da7b166082aef37049b48766399000a3253e471a"}
+    ],
+    "note": "These are the code IDs recorded for the runs. There were uncommitted changes, so the Git commit alone doesn't describe all the code used. Current code may differ. Later fixes did not produce these scores."
+  },
+  "evaluations": [
+    {
+      "system": "base", "route": "direct", "languages": ["de", "fr"],
+      "adapters_by_leg": [null], "examples": 1012,
+      "chrf": 47.5397896697326, "empty_hypotheses": 0, "empty_intermediates": null,
+      "private_records": {"file_name": "eval-vast-57306848-base-direct-de-fr-devtest.jsonl", "sha256": "aad93e7aa7e520ae1898698c7fc3cfe04e843e044b6677416f32eaa06809b327", "published": false}
+    },
+    {
+      "system": "base", "route": "pivot", "languages": ["de", "en", "fr"],
+      "adapters_by_leg": [null, null], "examples": 1012,
+      "chrf": 47.84169941080002, "empty_hypotheses": 0, "empty_intermediates": 0,
+      "private_records": {"file_name": "eval-vast-57306848-base-pivot-de-fr-devtest.jsonl", "sha256": "00ec16195c7cb3c00ee4e52a98ca944055ad11e3e4f6f6341b9d1677d2f27125", "published": false}
+    },
+    {
+      "system": "monolith", "route": "direct", "languages": ["de", "fr"],
+      "adapters_by_leg": ["eos-monolith"], "examples": 1012,
+      "chrf": 39.17092169306802, "empty_hypotheses": 28, "empty_intermediates": null,
+      "private_records": {"file_name": "eval-vast-57306848-monolith-direct-de-fr-devtest.jsonl", "sha256": "5fa377d7c503b0cb3f1d09c8d0c6807742efcfc815e5230e858cc2a7f76fe0a0", "published": false}
+    },
+    {
+      "system": "monolith", "route": "pivot", "languages": ["de", "en", "fr"],
+      "adapters_by_leg": ["eos-monolith", "eos-monolith"], "examples": 1012,
+      "chrf": 48.954943518214364, "empty_hypotheses": 3, "empty_intermediates": 0,
+      "private_records": {"file_name": "eval-vast-57306848-monolith-pivot-de-fr-devtest.jsonl", "sha256": "dc44166f1baa00ec082ce79107fc3e4984d42b7ee2974b2125e4d712c191f388", "published": false}
+    },
+    {
+      "system": "cartridges", "route": "direct", "languages": ["de", "fr"],
+      "adapters_by_leg": ["task-eos-de-fr"], "examples": 1012,
+      "chrf": 26.412264639547207, "empty_hypotheses": 0, "empty_intermediates": null,
+      "private_records": {"file_name": "eval-vast-57306848-cartridges-direct-de-fr-devtest.jsonl", "sha256": "31f352b0b33972af3145e71a0156412ecd8a620439d7931e3b17f6f5416bc274", "published": false}
+    },
+    {
+      "system": "cartridges", "route": "pivot", "languages": ["de", "en", "fr"],
+      "adapters_by_leg": ["task-eos-de-en", "task-eos-en-fr"], "examples": 1012,
+      "chrf": 47.46309325431584, "empty_hypotheses": 0, "empty_intermediates": 0,
+      "private_records": {"file_name": "eval-vast-57306848-cartridges-pivot-de-fr-devtest.jsonl", "sha256": "1ab7ad2f1a53c05cec59286fbdb35ee9c03d43114fd2e34becaf7d7a56aee1cd", "published": false}
+    }
+  ],
+  "limits": [
+    "The base model scored highest directly. The single adapter scored highest through the manually chosen English route. I haven't tested whether the small differences are significant.",
+    "The cartridges did badly directly. Going through English brought them only roughly back to the base model's score. This didn't show that they work well together on a new direct language pair.",
+    "I haven't counted language errors across the whole dataset, asked people to assess meaning, measured EOS stopping rates, or established performance on other hardware.",
+    "This doesn't show that every cartridge approach must fail. The older tables and charts describe different runs and are unchanged."
+  ]
+}
